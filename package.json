@@ -11,6 +11,7 @@
   "scripts": {
     "target-app": "tsx target-app/main.ts",
     "discover": "tsx src/cli/discover.ts",
+    "compile": "tsx src/cli/compile.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "test": "vitest run",
