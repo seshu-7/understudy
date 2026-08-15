@@ -1,0 +1,18 @@
+# Secrets. Never commit these; .env.example documents the shape instead.
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Evidence is committed on purpose — it is a deliverable. Only scratch is not.
+evidence/**/*.tmp
+evidence/**/.partial/
+
+# Ollama model blobs, if anyone points the cache here
+models/
+
+.DS_Store
+Thumbs.db
