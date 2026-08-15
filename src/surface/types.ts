@@ -6,36 +6,29 @@
  * accessibility bridge. The design rests on that split holding: if the
  * discovery loop or the replay engine ever needs to know it is driving a
  * browser, the "this extends to desktop" claim in the write-up is fiction.
+ *
+ * `SurfaceKind`, `Role`, `TextMatch`, `FramePath`, `Rect`, `SemanticDescriptor`
+ * and `WaitCondition` are re-exported from `../artifact/schema.ts` rather
+ * than declared here. They used to be hand-written in this file, mirrored by
+ * a second, independent hand-written copy inside the Zod artifact schema,
+ * with a test asserting the two never drifted apart. Phase 4 tried to
+ * compile a discovered step's descriptor directly into an artifact `Step`
+ * and the type checker caught what the test could not: Zod infers
+ * `frame: string[]`, this file declared `frame: readonly string[]`, and
+ * TypeScript correctly refused to treat the two as the same type even though
+ * every value either one could hold was identical. A parity test proves two
+ * representations agree on today's shape; it cannot stop someone editing one
+ * and not the other next month. One definition does.
+ *
+ * These are the types that get *persisted* — written into a capability and
+ * read back off disk, possibly days or tenants later — which is exactly the
+ * boundary Zod validation is for. `UINode`, `UISnapshot`, `Action` and the
+ * rest below stay plain TypeScript: they describe live, ephemeral data our
+ * own adapter just produced, and nothing here ever deserialises them from
+ * disk.
  */
-
-/** Which family of adapter produced a snapshot. Recorded on artifacts so a
- *  capability can refuse to replay against a surface it was never recorded on. */
-export type SurfaceKind = "web" | "desktop";
-
-/** Normalised control roles. Deliberately small — this is the vocabulary the
- *  model gets to reason in, and every adapter has to map onto it. ARIA, UIA
- *  and AX all collapse into these without much argument. */
-export type Role =
-  | "button"
-  | "link"
-  | "textbox"
-  | "checkbox"
-  | "radio"
-  | "combobox"
-  | "option"
-  | "listitem"
-  | "row"
-  | "cell"
-  | "heading"
-  | "text"
-  | "image"
-  | "dialog"
-  | "alert"
-  | "table"
-  | "form"
-  | "region"
-  | "tab"
-  | "unknown";
+export type { SurfaceKind, Role, TextMatch, FramePath, Rect, SemanticDescriptor, WaitCondition } from "../artifact/schema.js";
+import type { Role, SemanticDescriptor, SurfaceKind, FramePath, Rect, WaitCondition } from "../artifact/schema.js";
 
 /** Address of a node *within one snapshot*. Never persist one: refs are
  *  assigned per observation and mean nothing on the next. Durable addressing
@@ -47,17 +40,6 @@ export type NodeRef = string & { readonly __nodeRef: unique symbol };
 export function nodeRef(value: string): NodeRef {
   return value as NodeRef;
 }
-
-export interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/** Path through nested frames — framesets are everywhere in the applications
- *  this targets. Empty means the top document. On desktop, the window chain. */
-export type FramePath = readonly string[];
 
 export interface NodeState {
   disabled: boolean;
@@ -112,44 +94,6 @@ export interface UISnapshot {
   digest: string;
 }
 
-export type TextMatch =
-  | { kind: "exact"; value: string }
-  | { kind: "normalized"; value: string }
-  | { kind: "contains"; value: string }
-  | { kind: "pattern"; source: string; flags?: string };
-
-/**
- * How a step names the control it wants, durably.
- *
- * This is not a selector. A selector is a single hypothesis that either hits
- * or misses; this is a bundle of independent evidence that every candidate
- * node gets scored against. Two things follow, and both are things the brief
- * asks for. A tenant that rebrands "Search" to "Find Member" degrades the
- * name score but the structural evidence still carries the match. And when
- * two candidates score alike, the matcher can say so and stop, rather than
- * silently taking the first hit and doing the wrong thing to a real account.
- */
-export interface SemanticDescriptor {
-  role: Role;
-  name?: TextMatch;
-  label?: TextMatch;
-  /** Nearest landmark or section containing the control — the "Member Search"
-   *  fieldset. Survives layout churn better than any path expression. */
-  within?: { role: Role; name: TextMatch };
-  /** "the textbox immediately following the label 'Member ID'". The anchor is
-   *  what makes unlabelled legacy inputs addressable at all. */
-  anchor?: {
-    direction: "after" | "before";
-    node: { role: Role; name: TextMatch };
-  };
-  frame?: FramePath;
-  ordinal?: number;
-  /** What the model actually saw when this was recorded. Kept so a human
-   *  reviewing the artifact has something concrete to read, and so replay
-   *  failures can report "expected this, observed that". */
-  observedAs?: { text: string; bounds?: Rect };
-}
-
 /** Per-signal contribution to a match score. Surfaced in failures so a
  *  human can see *why* the matcher decided what it decided. */
 export interface MatchEvidence {
@@ -177,12 +121,6 @@ export type MatchResult =
     }
   | { status: "ambiguous"; candidates: readonly { ref: NodeRef; score: number }[] }
   | { status: "absent"; bestScore: number };
-
-export type WaitCondition =
-  | { kind: "settled" }
-  | { kind: "node_present"; descriptor: SemanticDescriptor }
-  | { kind: "node_absent"; descriptor: SemanticDescriptor }
-  | { kind: "location_matches"; pattern: string };
 
 /**
  * The action vocabulary.
