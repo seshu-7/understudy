@@ -1,0 +1,48 @@
+{
+  "$comment": "Guardrails, evaluated on every action in BOTH discovery and replay. Discovery is not a trusted context: a model exploring a back-office app is exactly where an unbounded action does damage.",
+
+  "allowlist": {
+    "origins": ["http://127.0.0.1:4501", "http://localhost:4501"],
+    "routes": [
+      "/servicing/**",
+      "/members/**",
+      "/accounts/**",
+      "/login"
+    ],
+    "denyRoutes": [
+      "/admin/**",
+      "/servicing/**/delete",
+      "/servicing/**/close"
+    ],
+    "actions": ["click", "fill", "select", "press", "navigate", "wait"]
+  },
+
+  "risk": {
+    "$comment": "Default is safe; the first matching rule wins. Irreversible actions never run unattended, regardless of approval state.",
+    "default": "safe",
+    "rules": [
+      { "match": { "route": "/**/confirm" }, "tier": "elevated" },
+      { "match": { "nameMatches": "(?i)\\b(post|submit|transfer|disburse)\\b" }, "tier": "elevated" },
+      { "match": { "nameMatches": "(?i)\\b(delete|close account|void|reverse)\\b" }, "tier": "irreversible" }
+    ]
+  },
+
+  "unattended": {
+    "$comment": "What replay may do with no human watching.",
+    "requiresApproval": "approved",
+    "maxTier": "elevated",
+    "onIrreversible": "escalate"
+  },
+
+  "redaction": {
+    "$comment": "Applied at the perception boundary, before an observation reaches the model, the trace, an artifact or a log. Redacting at write time is too late — by then the value has already been sent to the planner.",
+    "patterns": [
+      { "name": "ssn", "regex": "\\b\\d{3}-\\d{2}-\\d{4}\\b" },
+      { "name": "card", "regex": "\\b(?:\\d[ -]?){13,19}\\b" },
+      { "name": "email", "regex": "[\\w.+-]+@[\\w-]+\\.[\\w.]+" },
+      { "name": "bearer", "regex": "(?i)\\b(bearer\\s+|sk-|ghp_|AIza)[A-Za-z0-9._-]{16,}" }
+    ],
+    "fieldNames": ["password", "pin", "ssn", "taxId", "cardNumber", "securityCode"],
+    "placeholder": "[redacted:{name}]"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$comment": "Same vendor product, different institution: rebranded labels, a slightly different layout, one extra interstitial. Stands in for the real situation where hundreds of tenants run the same software configured differently. The overlay patches a base capability rather than re-recording it.",
+  "tenant": "cascade",
+  "displayName": "Cascade Federal",
+  "app": "corevantage-servicing",
+  "appVersion": "7.4",
+  "entryPoint": "http://127.0.0.1:4502/servicing",
+  "overlay": {
+    "$comment": "Populated in Phase 8, once there is a base capability to override. Empty means: run the base artifact unmodified and report any drift it hits.",
+    "stepOverrides": [],
+    "outcomeOverrides": []
+  }
+}

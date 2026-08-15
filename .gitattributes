@@ -1,0 +1,11 @@
+# Authored on Windows, reviewed on macOS and Linux. Normalise to LF in the
+# repo and in the working copy so diffs stay clean for everyone.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
+*.webm binary
+*.mp4 binary
