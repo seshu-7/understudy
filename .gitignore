@@ -7,6 +7,11 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Local editor/tooling scratch, not part of the deliverable
+.claude/
+.vscode/
+.idea/
+
 # Evidence is committed on purpose — it is a deliverable. Only scratch is not.
 evidence/**/*.tmp
 evidence/**/.partial/

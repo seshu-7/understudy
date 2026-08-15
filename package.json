@@ -9,6 +9,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "target-app": "tsx target-app/main.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "test": "vitest run",
