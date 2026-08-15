@@ -3,10 +3,20 @@
 What actually happened when this ran. Committed on purpose — it is a
 deliverable, not a build product.
 
-> Empty until Phase 3. This file documents the shape so the layout is fixed
-> before anything is written into it.
+## Runs in this repository
 
-Each run gets a directory named `<kind>-<runId>/`:
+| Directory | What it is |
+| --- | --- |
+| [`discovery-1786833847548/`](./discovery-1786833847548/) | **The genuine LLM-driven discovery run** the brief requires. Local model (`ollama/qwen2.5:7b-instruct`), no key, no account. Goal: *"look up member 100234 and read their current savings balance."* Reached the answer in 5 steps — sign on, search, read — and extracted `savings_balance: "4,182.55"`, matching the seeded data exactly. Cost: $0.00. |
+| [`discovery-1786834288146/`](./discovery-1786834288146/) | **The same run, replayed from the cassette recorded in the run above, with the Ollama server stopped entirely** before this was started. Same five decisions, same outputs, in seconds instead of minutes, with zero model calls physically possible — Ollama was not reachable when this ran. This is the evidence for "how to run without live services," and for the claim that every run after the first costs nothing. |
+
+Do not confuse the second row with Phase 5's replay engine. This replays the
+**discovery cassette** — the recorded model exchange — to prove discovery
+itself is reproducible offline. Phase 5's replay evidence (`replay-*/`, once
+it exists) is a different thing: the *compiled capability* executing with no
+model in the loop at all, which is the system's actual production path.
+
+Each discovery run is a directory named `discovery-<runId>/`:
 
 ```
 discovery-<runId>/
