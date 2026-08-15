@@ -1,4 +1,4 @@
-import { redactValue } from "./redact.js";
+import { redactText, redactValue } from "./redact.js";
 import type { RedactionPolicy } from "./redact.js";
 import type { UINode, UISnapshot } from "../surface/types.js";
 
@@ -45,8 +45,19 @@ const MAX_UNCHANGED_LINES = 40;
 
 function lineFor(node: UINode, index: number, policy: RedactionPolicy): string {
   const parts = [`[${index}]`, node.role];
-  const name = node.name ? redactValue(node.name, node.label ?? node.name, policy) : "";
-  const label = node.label ? redactValue(node.label, node.label, policy) : "";
+  // Field-name-based redaction ("this label says Password, hide it") only
+  // ever makes sense for a control's *value* - the label itself is a
+  // caption, not a secret, and blanking it destroys the very text the model
+  // needs to tell fields apart. A live run against this exact bug picked
+  // "navigate" three times running on the sign-on screen because the
+  // Password caption had been redacted into "[redacted:field]" and the
+  // password textbox lost its label entirely - the model was reasoning over
+  // a screen with a hole in it. name and label get pattern redaction only
+  // (a stray SSN in ordinary text is still worth catching); value is the one
+  // place the field-name check applies, using the control's own label as
+  // the evidence for what kind of value it holds.
+  const name = node.name ? redactText(node.name, policy) : "";
+  const label = node.label ? redactText(node.label, policy) : "";
   const value = node.value ? redactValue(node.value, node.label ?? "", policy) : "";
 
   if (name) parts.push(`"${name}"`);

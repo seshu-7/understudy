@@ -54,6 +54,24 @@ describe("formatting an observation for the model", () => {
     expect(text).toContain("[redacted:field]");
   });
 
+  it("does not redact the caption naming a sensitive field, only its value", () => {
+    // Regression test for a live discovery run that picked "navigate" three
+    // times running on the sign-on screen: the field-name check was applied
+    // to a plain caption text node ("Password") in addition to the actual
+    // value, so the caption itself came back as "[redacted:field]" and the
+    // model lost the one signal it needed to find the password field. The
+    // caption is not a secret - it is what makes the real secret findable.
+    const snap = snapshot([
+      node({ role: "text", name: "Password" }),
+      node({ role: "textbox", label: "Password", value: "hunter2" }),
+    ]);
+    const { text } = formatObservation(snap, policy);
+
+    expect(text).toContain('[0] text "Password"');
+    expect(text).toContain('label:"Password"');
+    expect(text).not.toContain("hunter2");
+  });
+
   it("redacts a pattern match even in a field with an innocuous label", () => {
     const snap = snapshot([node({ role: "text", name: "SSN on file: 123-45-6789" })]);
     const { text } = formatObservation(snap, policy);
