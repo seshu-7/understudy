@@ -42,6 +42,12 @@ export type Role =
  *  is `SemanticDescriptor`. Branded so that persisting one is a type error. */
 export type NodeRef = string & { readonly __nodeRef: unique symbol };
 
+/** The only sanctioned way to mint a NodeRef. Keeping it to one place means
+ *  the brand actually costs something to bypass. */
+export function nodeRef(value: string): NodeRef {
+  return value as NodeRef;
+}
+
 export interface Rect {
   x: number;
   y: number;
