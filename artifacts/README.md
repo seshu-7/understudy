@@ -1,9 +1,14 @@
 # artifacts
 
 Saved capabilities. One JSON file per capability, committed so a reviewer can
-read the schema output without running anything.
+read the schema output without running anything. Each `.json` has a matching
+`.md` alongside it - the human-readable render (`src/artifact/render.ts`) a
+reviewer actually reads before flipping `approval` from `draft` to `approved`.
 
-> Empty until Phase 4.
+`corevantage_servicing.member_savings_balance.v1.json` is the first real one:
+compiled by `npm run compile` from a genuine discovery run
+([`evidence/discovery-1786836008257/`](../evidence/discovery-1786836008257/)),
+not hand-written or built from a fixture.
 
 A capability is a build output, not a transcript. It carries a content hash
 over its semantic parts — steps, parameters, outcomes — excluding provenance

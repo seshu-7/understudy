@@ -60,8 +60,20 @@ _Trade-offs, boundaries, and what was rejected: pending._
 
 ## 2. Artifact schema
 
-_Full schema and rationale: pending Phase 4._ The shape is committed in
-`src/artifact/types.ts` and the reasoning so far:
+The schema is `src/artifact/schema.ts` — Zod, not a hand-written interface.
+That is a decision, not a style choice: a capability read back off disk days
+or tenants later is untrusted input crossing a real boundary, exactly where
+validation earns its keep, and Zod's `z.infer` means the TypeScript types the
+rest of the system compiles against and the runtime check that guards
+`readFile` results are the same declaration, not two that can drift. The
+descriptor vocabulary (`Role`, `TextMatch`, `SemanticDescriptor`, ...) lives
+here too, and `src/surface/types.ts` re-exports it rather than keeping its own
+copy — an earlier version of this file kept two hand-written definitions of
+`SemanticDescriptor` in sync by convention, until compiling the first real
+step through both caught a `readonly string[]` vs `string[]` mismatch on
+`frame` that a parity test alone had not (and structurally could not: a
+runtime test proves two representations agree on today's shape, not that
+nobody edits one without the other next month).
 
 A capability is a **contract an agent calls**, so it carries typed inputs,
 typed outputs and a declared set of outcomes — not merely an ordered step
@@ -79,6 +91,70 @@ structural signals still carry the match. And when two candidates score alike,
 the matcher reports `AMBIGUOUS_TARGET` and stops rather than taking the first
 hit, because guessing is how automation posts a transaction to the wrong
 account.
+
+### The compiler
+
+`src/artifact/compile.ts` turns a `DiscoveryOutcome` — the raw, ordered record
+of one run — into a capability: a program a *different* set of inputs can run
+correctly, not a transcript of what happened to member 100234 on one
+afternoon. It does three things, and refuses rather than guesses wherever the
+evidence does not clearly support a decision:
+
+- **Parameterisation.** A fill/select/navigate value becomes a named input
+  when it appears verbatim as its own token in the goal text — "100234" in
+  both the typed value and "look up member 100234..." is checkable evidence
+  it is caller-supplied, not a fixed detail of the flow. The same value reused
+  across steps binds to one parameter, not several. A value the model typed
+  that happens not to appear in the goal's wording — an inferred password, an
+  operator ID — stays a literal; this is a real limit of the heuristic, not a
+  placeholder, and the compiled artifact's inputs table is honest about what
+  is and is not caller-controlled.
+- **Checkpoint inference.** Step *N*'s checkpoint is "step *N+1*'s own target
+  is present" — proof, taken from the discovery run itself, that the action
+  actually advanced the flow. A checkpoint keyed to the literal text or a
+  digest of the resulting screen would be wrong on purpose here: replay with
+  different parameters is expected to land on a screen with different data,
+  and a structural "does this control exist" check is invariant to that in a
+  way a value-based one is not.
+- **Output binding.** Discovery grounds every claimed output against the live
+  snapshot at the moment it is produced (`src/discovery/ground.ts`), tracing
+  the string the model claimed back to exactly one real node — or to nothing,
+  if the match is missing or ambiguous, rather than guessing which node was
+  meant. A claim that cannot be grounded fails the whole compile loudly; a
+  capability that silently drops an output the goal asked for is worse than
+  one that refuses to finish.
+
+**A bug the compiler caught in its own output.** The last step in a run has
+no *N+1* to borrow a checkpoint from, so it originally checkpointed against
+the descriptor of whatever output the run produced — which sounds like the
+same structural principle applied one step further, but is not: for a plain
+`text`-role node there is no separate label, so its accessible *name* **is**
+its displayed content. Compiling the real Phase 3 evidence run produced a
+checkpoint reading "screen shows text named 4,182.55" — today's specific
+balance, baked into the very descriptor meant to prove the capability still
+works for a *different* member. The same defect existed in how that output
+was re-extracted, which is the more serious half: replaying with a different
+`member_number` would have searched the screen for a node literally named
+today's balance and never found it. The fix (`structuralOnly` in
+`compile.ts`) strips any `name`/`label` that literally equals the value that
+was extracted through it, keeping only the evidence that does not vary with
+the data — role, containing table, frame, ordinal position. The rendered
+artifact now reads "screen shows text within 'Accounts' \[position 6\]",
+which is a weaker-looking checkpoint and a correct one; the human-readable
+render was what actually made this visible; a JSON diff would not have made
+"the checkpoint over-fits to today's value" legible half as quickly. Real
+evidence, not the hand-written test fixtures, is what surfaced this — the
+fixtures used a descriptor without a `name` field at all, so the bug was
+invisible to them until compiled against the genuine 5-step run.
+
+### The render
+
+`src/artifact/render.ts` produces the Markdown a human reviewer reads before
+flipping a capability's `approval` from `draft` to `approved` — deliberately
+rendering every field a shorter summary would drop, including the raw match
+evidence a step will resolve against at replay time, because that is exactly
+what a reviewer signing off on unattended replay against a legacy banking
+screen needs to see.
 
 ## 3. Determinism & error handling
 

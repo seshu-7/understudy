@@ -1,0 +1,389 @@
+{
+  "schemaVersion": "1.0",
+  "id": "corevantage_servicing.member_savings_balance",
+  "name": "Look up a member's savings balance",
+  "description": "look up member {member_number} and read their current savings balance",
+  "version": 1,
+  "contentHash": "10f12f3bda9a8384",
+  "approval": "draft",
+  "target": {
+    "app": "corevantage-servicing",
+    "tenant": "meridian",
+    "surface": "web",
+    "entryPoint": "http://127.0.0.1:4501/servicing/login.asp"
+  },
+  "inputs": [
+    {
+      "name": "member_number",
+      "type": "string",
+      "description": "\"Member Number\" - bound from the value discovery typed for this run.",
+      "required": true,
+      "example": "100234"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "savings_balance",
+      "type": "string",
+      "description": "Read from the screen reached at the end of this capability.",
+      "extract": {
+        "descriptor": {
+          "role": "text",
+          "within": {
+            "role": "table",
+            "name": {
+              "kind": "normalized",
+              "value": "Accounts"
+            }
+          },
+          "frame": [
+            "mainfrm"
+          ],
+          "ordinal": 6,
+          "observedAs": {
+            "text": "4,182.55",
+            "bounds": {
+              "x": 160.359375,
+              "y": 200,
+              "width": 45.421875,
+              "height": 12
+            }
+          }
+        },
+        "from": "text"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "index": 0,
+      "intent": "Click the Sign On button to proceed to the main application",
+      "action": {
+        "kind": "click",
+        "target": {
+          "role": "button",
+          "name": {
+            "kind": "normalized",
+            "value": "Sign On"
+          },
+          "within": {
+            "role": "table",
+            "name": {
+              "kind": "normalized",
+              "value": "Sign On CoreVantage Servicing 7.2"
+            }
+          },
+          "ordinal": 0,
+          "observedAs": {
+            "text": "Sign On",
+            "bounds": {
+              "x": 74.875,
+              "y": 116,
+              "width": 64.171875,
+              "height": 21
+            }
+          }
+        }
+      },
+      "checkpoint": {
+        "kind": "node_present",
+        "descriptor": {
+          "role": "textbox",
+          "label": {
+            "kind": "normalized",
+            "value": "Operator ID"
+          },
+          "within": {
+            "role": "form",
+            "name": {
+              "kind": "normalized",
+              "value": "Operator ID is required."
+            }
+          },
+          "ordinal": 0,
+          "observedAs": {
+            "text": "Operator ID",
+            "bounds": {
+              "x": 74.875,
+              "y": 86,
+              "width": 149,
+              "height": 21
+            }
+          }
+        }
+      },
+      "risk": "safe",
+      "timeoutMs": 10000
+    },
+    {
+      "index": 1,
+      "intent": "enter the operator ID into the required field",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "role": "textbox",
+          "label": {
+            "kind": "normalized",
+            "value": "Operator ID"
+          },
+          "within": {
+            "role": "form",
+            "name": {
+              "kind": "normalized",
+              "value": "Operator ID is required."
+            }
+          },
+          "ordinal": 0,
+          "observedAs": {
+            "text": "Operator ID",
+            "bounds": {
+              "x": 74.875,
+              "y": 86,
+              "width": 149,
+              "height": 21
+            }
+          }
+        },
+        "value": {
+          "kind": "literal",
+          "value": "demo"
+        }
+      },
+      "checkpoint": {
+        "kind": "node_present",
+        "descriptor": {
+          "role": "button",
+          "name": {
+            "kind": "normalized",
+            "value": "Sign On"
+          },
+          "within": {
+            "role": "form",
+            "name": {
+              "kind": "normalized",
+              "value": "Operator ID is required."
+            }
+          },
+          "ordinal": 0,
+          "observedAs": {
+            "text": "Sign On",
+            "bounds": {
+              "x": 74.875,
+              "y": 159,
+              "width": 64.171875,
+              "height": 21
+            }
+          }
+        }
+      },
+      "risk": "safe",
+      "timeoutMs": 10000
+    },
+    {
+      "index": 2,
+      "intent": "Click the Sign On button to proceed to the next screen",
+      "action": {
+        "kind": "click",
+        "target": {
+          "role": "button",
+          "name": {
+            "kind": "normalized",
+            "value": "Sign On"
+          },
+          "within": {
+            "role": "form",
+            "name": {
+              "kind": "normalized",
+              "value": "Operator ID is required."
+            }
+          },
+          "ordinal": 0,
+          "observedAs": {
+            "text": "Sign On",
+            "bounds": {
+              "x": 74.875,
+              "y": 159,
+              "width": 64.171875,
+              "height": 21
+            }
+          }
+        }
+      },
+      "checkpoint": {
+        "kind": "node_present",
+        "descriptor": {
+          "role": "textbox",
+          "label": {
+            "kind": "normalized",
+            "value": "Member Number"
+          },
+          "within": {
+            "role": "table",
+            "name": {
+              "kind": "normalized",
+              "value": "Servicing > Member Search"
+            }
+          },
+          "frame": [
+            "mainfrm"
+          ],
+          "ordinal": 0,
+          "observedAs": {
+            "text": "Member Number",
+            "bounds": {
+              "x": 99.078125,
+              "y": 60,
+              "width": 121,
+              "height": 21
+            }
+          }
+        }
+      },
+      "risk": "safe",
+      "timeoutMs": 10000
+    },
+    {
+      "index": 3,
+      "intent": "enter the member number into the search field",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "role": "textbox",
+          "label": {
+            "kind": "normalized",
+            "value": "Member Number"
+          },
+          "within": {
+            "role": "table",
+            "name": {
+              "kind": "normalized",
+              "value": "Servicing > Member Search"
+            }
+          },
+          "frame": [
+            "mainfrm"
+          ],
+          "ordinal": 0,
+          "observedAs": {
+            "text": "Member Number",
+            "bounds": {
+              "x": 99.078125,
+              "y": 60,
+              "width": 121,
+              "height": 21
+            }
+          }
+        },
+        "value": {
+          "kind": "param",
+          "name": "member_number"
+        }
+      },
+      "checkpoint": {
+        "kind": "node_present",
+        "descriptor": {
+          "role": "button",
+          "name": {
+            "kind": "normalized",
+            "value": "Search"
+          },
+          "within": {
+            "role": "table",
+            "name": {
+              "kind": "normalized",
+              "value": "Servicing > Member Search"
+            }
+          },
+          "frame": [
+            "mainfrm"
+          ],
+          "ordinal": 0,
+          "observedAs": {
+            "text": "Search",
+            "bounds": {
+              "x": 99.078125,
+              "y": 106,
+              "width": 58.25,
+              "height": 21
+            }
+          }
+        }
+      },
+      "risk": "safe",
+      "timeoutMs": 10000
+    },
+    {
+      "index": 4,
+      "intent": "Click the Search button to initiate the search for member 100234",
+      "action": {
+        "kind": "click",
+        "target": {
+          "role": "button",
+          "name": {
+            "kind": "normalized",
+            "value": "Search"
+          },
+          "within": {
+            "role": "table",
+            "name": {
+              "kind": "normalized",
+              "value": "Servicing > Member Search"
+            }
+          },
+          "frame": [
+            "mainfrm"
+          ],
+          "ordinal": 0,
+          "observedAs": {
+            "text": "Search",
+            "bounds": {
+              "x": 99.078125,
+              "y": 106,
+              "width": 58.25,
+              "height": 21
+            }
+          }
+        }
+      },
+      "checkpoint": {
+        "kind": "node_present",
+        "descriptor": {
+          "role": "text",
+          "within": {
+            "role": "table",
+            "name": {
+              "kind": "normalized",
+              "value": "Accounts"
+            }
+          },
+          "frame": [
+            "mainfrm"
+          ],
+          "ordinal": 6,
+          "observedAs": {
+            "text": "4,182.55",
+            "bounds": {
+              "x": 160.359375,
+              "y": 200,
+              "width": 45.421875,
+              "height": 12
+            }
+          }
+        }
+      },
+      "risk": "safe",
+      "timeoutMs": 10000
+    }
+  ],
+  "outcomes": [],
+  "provenance": {
+    "discoveryRunId": "1786836008257",
+    "recordedAt": "2026-08-15T23:20:08.486Z",
+    "planner": {
+      "provider": "ollama",
+      "model": "qwen2.5:7b-instruct"
+    },
+    "prunedSteps": 0,
+    "humanEdited": false
+  }
+}
