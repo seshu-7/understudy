@@ -10,6 +10,7 @@
   },
   "scripts": {
     "target-app": "tsx target-app/main.ts",
+    "discover": "tsx src/cli/discover.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "test": "vitest run",
