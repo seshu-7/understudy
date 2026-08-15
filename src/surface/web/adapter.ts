@@ -204,9 +204,11 @@ export class WebSurface implements Surface {
 
   async act(action: Action): Promise<void> {
     switch (action.kind) {
-      case "click":
+      case "click": {
+        const before = this.snapshotFrameUrls();
         await this.locate(action.target).click({ timeout: this.actionTimeoutMs });
-        return this.settle();
+        return this.settle(before);
+      }
 
       case "fill":
         await this.locate(action.target).fill(action.text, { timeout: this.actionTimeoutMs });
@@ -216,9 +218,11 @@ export class WebSurface implements Surface {
         await this.locate(action.target).selectOption(action.option, { timeout: this.actionTimeoutMs });
         return;
 
-      case "press":
+      case "press": {
+        const before = this.snapshotFrameUrls();
         await this.page.keyboard.press(action.key);
-        return this.settle();
+        return this.settle(before);
+      }
 
       case "navigate":
         await this.page.goto(action.to, { waitUntil: "domcontentloaded", timeout: this.actionTimeoutMs });
@@ -257,23 +261,65 @@ export class WebSurface implements Surface {
     return scope.locator(`[${HANDLE_ATTR}="${ref}"]`);
   }
 
+  /** frame identity (name, falling back to url for the unnamed top document)
+   *  -> its current url. Used to detect that a navigation actually happened,
+   *  as opposed to merely that nothing is currently in flight. */
+  private snapshotFrameUrls(): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const frame of this.page.frames()) {
+      if (!frame.isDetached()) map.set(frame.name() || "__top__", frame.url());
+    }
+    return map;
+  }
+
   /**
    * Wait for the surface to stop moving.
    *
-   * The obvious implementation — await the page's load state — is wrong here,
-   * and wrong in a way that only a frameset reveals. In this application the
-   * top document is a `<frameset>`: it loads once and then never navigates
-   * again, no matter how many screens the operator moves through inside it.
-   * So `page.waitForLoadState()` returns immediately and always, and the next
-   * observation captures the *previous* screen. The symptom is a step that
-   * appears to do nothing, one action out of step with reality.
+   * Two distinct races live here, and both only show up under real timing
+   * pressure - three fast, unloaded runs missed both of them.
    *
-   * Network quiescence is the signal that actually tracks a server-rendered
-   * frameset, since a frame navigation is a page-level request either way.
-   * Per-frame load state is then awaited to catch anything that finished
-   * before the idle check began.
+   * The first is a frameset-specific trap: the top document loads once and
+   * never navigates again no matter how many screens the operator moves
+   * through, so `page.waitForLoadState()` alone returns instantly and always,
+   * and the next observation captures the *previous* screen. Network
+   * quiescence is the signal that actually tracks a frame navigation, since
+   * it is a page-level request either way.
+   *
+   * The second is subtler and not specific to framesets: `waitForLoadState`
+   * reports whatever the *current* document's lifecycle state already is. If
+   * it is called before the click's resulting navigation has started
+   * dispatching requests - which becomes more likely, not less, under CPU
+   * contention - the old, already-settled document satisfies "idle"
+   * immediately, and settle() returns before the new page has begun loading
+   * at all. `before`, when supplied, is a pre-action snapshot of every
+   * frame's URL; this method first waits for at least one of them to
+   * actually change, closing that race directly instead of hoping the load-
+   * state heuristics happen to run late enough to see it.
    */
-  private async settle(): Promise<void> {
+  private async settle(before?: ReadonlyMap<string, string>): Promise<void> {
+    if (before) {
+      const deadline = Date.now() + this.actionTimeoutMs;
+      while (Date.now() < deadline) {
+        const after = this.snapshotFrameUrls();
+        let navigated = after.size !== before.size;
+        if (!navigated) {
+          for (const [key, url] of after) {
+            if (before.get(key) !== url) {
+              navigated = true;
+              break;
+            }
+          }
+        }
+        if (navigated) break;
+        await this.page.waitForTimeout(50);
+      }
+      // No frame's URL changed within the deadline. That is not necessarily
+      // wrong - some actions genuinely do not navigate anything - so this
+      // falls through to the load-state heuristics below rather than failing
+      // outright; a step whose checkpoint actually needed a navigation will
+      // catch the case where none happened.
+    }
+
     try {
       await this.page.waitForLoadState("domcontentloaded", { timeout: this.actionTimeoutMs });
     } catch {
