@@ -47,6 +47,12 @@ export interface DiscoveredStep {
 
 export interface DiscoveryOutcome {
   goalId: string;
+  /** The goal this run was given, in full - not just its id. The Phase 4
+   *  compiler needs the original text (for the parameterisation heuristic)
+   *  and target (for the artifact's TargetBinding), and summary.json should
+   *  be self-sufficient to compile from without a reader having to go dig up
+   *  the CLI invocation that produced it. */
+  goal: DiscoveryGoal;
   runId: string;
   startedAt: string;
   finishedAt: string;

@@ -220,6 +220,7 @@ export async function runDiscovery(goal: DiscoveryGoal, deps: RunDiscoveryDeps):
 
   const outcome: DiscoveryOutcome = {
     goalId: goal.goalId,
+    goal,
     runId,
     startedAt,
     finishedAt: new Date().toISOString(),
