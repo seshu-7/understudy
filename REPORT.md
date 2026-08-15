@@ -1,6 +1,6 @@
 # Design write-up
 
-> **In progress — Phase 0 of 9.** Sections fill in as the decisions get made
+> **In progress — Phase 3 of 9.** Sections fill in as the decisions get made
 > and tested, not at the end from memory. Anything not yet built says so
 > plainly rather than describing an intention in the present tense.
 
@@ -30,6 +30,31 @@ abstraction quietly becomes browser-only.
 **The three-way outcome taxonomy is declarative.** See §3.
 
 **Control transfer is a lease.** See §5.
+
+**Discovery is observe → format → decide → policy gate → act → record**, and
+the model gets exactly one JSON decision per turn from a fixed vocabulary of
+eight actions — never a tool-calling protocol. That choice is about
+portability more than taste: tool-calling conventions differ enough between
+providers, and are flaky enough on a small model, that "produce one JSON
+object matching this schema" is the contract every target provider (Ollama's
+`format`, Gemini's `responseSchema`) already supports natively. The loop
+never trusts the model with more than one action at a time, and policy is
+checked on the resolved action *before* it reaches the surface — discovery is
+not a trusted context merely because it is exploratory.
+
+**The model choice is a measured decision, not an assumed one.** The obvious
+pick — a hybrid-thinking model like `qwen3:4b` — was tried first and rejected
+on evidence: it spent 150–200 invisible "thinking" tokens on a two-word
+reply, and a single realistic decision exceeded a five-minute ceiling with no
+response at all, reproduced with and without the JSON-schema constraint.
+Neither Ollama's generic `think: false` field nor Qwen3's own documented
+`/no_think` directive suppressed it on this build. Switching to a plain
+instruct model (`qwen2.5:7b-instruct`, no hybrid-thinking mode) brought a
+realistic decision down to roughly 90 seconds with a correct result. The
+generalisable point: on CPU-bound, wall-clock-bounded hardware, a model that
+reasons unconditionally is a worse default than a smaller model that answers
+directly, independent of parameter count. `src/discovery/providers/ollama.ts`
+carries the full timing evidence.
 
 _Trade-offs, boundaries, and what was rejected: pending._
 
@@ -107,6 +132,27 @@ not a trusted context, and is exactly where an unbounded action does damage.
 And redaction happens at the **perception boundary**, before an observation
 reaches the planner, the trace, an artifact or a log; redacting at write time
 is too late, because by then the value has already been sent to the model.
+
+Both were tested against real defects, not just designed and trusted. The
+shipped `nameMatches` risk rules and the bearer-token redaction pattern were
+originally written `"(?i)\\bpattern\\b"` — valid in PCRE, not in JS `RegExp`,
+which throws at construction on the inline group. The original `catch` around
+that construction swallowed the error and fell through to the default risk
+tier, so every rule meant to escalate a delete or a transfer to irreversible
+had done nothing since the policy file was first committed, silently.
+Case-insensitivity is now unconditional in the matcher rather than something
+every pattern author has to encode correctly, and a genuinely malformed
+pattern now throws instead of failing open — a guardrail that fails open on a
+typo is worse than one that refuses to run. Separately, the first version of
+the redaction check applied the field-name test to a control's *label* as
+well as its value, so a plain caption reading "Password" was itself replaced
+with `[redacted:field]` — destroying the exact text a model needs to find the
+password field, in the name of protecting a caption that was never sensitive.
+A live discovery run surfaced this directly: the model repeatedly chose
+`navigate` with no destination on the sign-on screen because its own label
+had been redacted out from under it. Fixed by scoping the field-name check to
+values only; a control's label and a plain text node's name get pattern
+redaction alone.
 
 ## 7. Cuts
 

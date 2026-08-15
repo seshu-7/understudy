@@ -87,6 +87,7 @@ function buildPlanner(prompt: string): Planner {
       return new OllamaPlanner({
         ...(process.env["OLLAMA_HOST"] ? { host: process.env["OLLAMA_HOST"] } : {}),
         ...(process.env["OLLAMA_MODEL"] ? { model: process.env["OLLAMA_MODEL"] } : {}),
+        ...(process.env["OLLAMA_TIMEOUT_MS"] ? { timeoutMs: Number(process.env["OLLAMA_TIMEOUT_MS"]) } : {}),
         systemPrompt: prompt,
       });
     case "google": {
