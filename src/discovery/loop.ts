@@ -2,6 +2,7 @@ import { describeNode } from "../surface/describe.js";
 import { formatObservation } from "./observe-format.js";
 import { checkAction, type Policy } from "./policy.js";
 import { CostCeilingExceededError, CostGovernor } from "./cost.js";
+import { groundOutputs, type OutputGrounding } from "./ground.js";
 import { TraceWriter } from "./trace.js";
 import type { Planner, PlannerDecision } from "./planner.js";
 import type { DiscoveredStep, DiscoveryGoal, DiscoveryOutcome, StopReason } from "./types.js";
@@ -104,6 +105,7 @@ export async function runDiscovery(goal: DiscoveryGoal, deps: RunDiscoveryDeps):
 
   const steps: DiscoveredStep[] = [];
   const outputs: Record<string, string> = {};
+  const outputGroundings: OutputGrounding[] = [];
   const historyLines: string[] = [];
   let stopReason: StopReason = "max_steps";
   let promptTokens = 0;
@@ -164,7 +166,11 @@ export async function runDiscovery(goal: DiscoveryGoal, deps: RunDiscoveryDeps):
     }
 
     if (decision.action === "finish") {
-      Object.assign(outputs, decision.outputs ?? {});
+      const rawOutputs = decision.outputs ?? {};
+      Object.assign(outputs, rawOutputs);
+      const groundings = groundOutputs(rawOutputs, snapshot);
+      outputGroundings.push(...groundings);
+      await trace.event("grounding", index, groundings);
       historyLines.push(`${index}. finished: ${decision.intent}`);
       stopReason = "goal_met";
       break;
@@ -220,6 +226,7 @@ export async function runDiscovery(goal: DiscoveryGoal, deps: RunDiscoveryDeps):
     stopReason,
     steps,
     extractedOutputs: outputs,
+    outputGroundings,
     tokenUsage: { promptTokens, completionTokens, estimatedUsd: costGovernor.totalUsd },
     provider: { name: planner.provider, model: planner.model },
   };

@@ -1,4 +1,5 @@
 import type { Action, SemanticDescriptor } from "../surface/types.js";
+import type { OutputGrounding } from "./ground.js";
 
 /**
  * The discovery loop's own vocabulary.
@@ -52,6 +53,9 @@ export interface DiscoveryOutcome {
   stopReason: StopReason;
   steps: readonly DiscoveredStep[];
   extractedOutputs: Record<string, string>;
+  /** Each output in extractedOutputs, traced back to the node it actually
+   *  came from - or to nothing, when that trace failed. See ground.ts. */
+  outputGroundings: readonly OutputGrounding[];
   tokenUsage: { promptTokens: number; completionTokens: number; estimatedUsd: number };
   provider: { name: string; model: string };
 }

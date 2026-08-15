@@ -18,7 +18,7 @@ import type { DiscoveryOutcome } from "./types.js";
 export interface TraceEvent {
   ts: string;
   index: number;
-  kind: "observation" | "decision" | "action" | "checkpoint" | "policy" | "stop";
+  kind: "observation" | "decision" | "action" | "checkpoint" | "policy" | "grounding" | "stop";
   data: unknown;
 }
 
