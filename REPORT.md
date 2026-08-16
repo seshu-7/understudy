@@ -1,8 +1,9 @@
 # Design write-up
 
-> **In progress — Phase 8 of 9.** Sections fill in as the decisions get made
-> and tested, not at the end from memory. Anything not yet built says so
-> plainly rather than describing an intention in the present tense.
+> **Complete.** Written phase by phase as decisions got made and tested, not
+> reconstructed at the end from memory - which is why the bugs a real run
+> caught (§2, §4, §6) are in here with the fix, not smoothed over. §7 is the
+> final, honest list of what is out of scope and why.
 
 ## 1. Architecture
 
@@ -56,7 +57,33 @@ reasons unconditionally is a worse default than a smaller model that answers
 directly, independent of parameter count. `src/discovery/providers/ollama.ts`
 carries the full timing evidence.
 
-_Trade-offs, boundaries, and what was rejected: pending._
+**Rejected: screenshot-and-coordinates grounding.** A vision model reasoning
+over pixels and clicking `(x, y)` would work against literally any rendering,
+including the ones a DOM- or accessibility-tree-based adapter cannot see
+inside (a canvas, a video call's UI). It was rejected for this problem
+specifically, not in general: it needs a multimodal model capable enough to
+reliably read a dense legacy screen, which on the CPU-only, $0 hardware this
+project is scoped to is a materially harder bar than a plain instruct model
+already struggling with text (§1's qwen3 measurement); it produces coordinate
+targets that break the moment a layout reflows, which is exactly the
+brittleness a scored, role-and-containment descriptor exists to avoid; and it
+has no natural encoding as a stable `SemanticDescriptor` for replay to
+re-resolve later; the coordinates that worked during discovery are not
+evidence about anything a future screen will look like. The node-graph
+approach is more work up front (an adapter has to know how to read the
+target's accessibility layer) and buys determinism and portability neither
+scheme gets for free otherwise.
+
+**A boundary honestly still open, not just architecturally argued.** The
+desktop claim - "Windows UI Automation and macOS AX produce the same shape"
+- rests on `Surface` being a narrow enough interface that a second
+implementation is plausible, and the `Action` vocabulary deliberately
+excludes anything that only makes sense in a browser. Nobody has written that
+second adapter. The claim is real evidence of a design decision (the
+interface was shaped by this constraint from Phase 0, not retrofitted), but
+it is not the same as a working desktop adapter, and this write-up says so
+plainly rather than letting the architecture do the talking for something
+that was never built.
 
 ## 2. Artifact schema
 
@@ -220,6 +247,21 @@ recorded against one tenant should be reusable against another running the
 same software rather than re-recorded per institution. This phase is that
 claim, checked against a second real tenant rather than left as an
 architectural note.
+
+**A simpler mechanism than Phase 0 first sketched, because the simpler one
+turned out to be enough.** The very first commit shipped `config/tenants/
+meridian.json` and `cascade.json`: a tenant registry with a structured
+`overlay: { stepOverrides: [], outcomeOverrides: [] }` field, populated per
+step by path. That scaffold sat untouched for eight phases and was removed
+in this one rather than filled in - once there was an actual capability and
+an actual second tenant to reuse it against, a flat `Record<string, string>`
+of literal text substitutions (`applyOverlay` in `src/artifact/overlay.ts`)
+turned out to say everything the real rename needed said, and a
+step-indexed override structure would have been complexity built for a
+scenario this project never actually exercised. Keeping the unused scaffold
+around and calling it "supported" would have been the dishonest choice; the
+right one was to let what got built diverge from the first sketch and say
+so here, not to force the sketch to be right in hindsight.
 
 **A second, real tenant, not a mock.** `target-app/tenants.ts` adds
 `TenantBranding` and a second preset (`NORTHSTAR`) to the exact same server
@@ -454,20 +496,55 @@ one this phase closed, named here rather than left for a reader to discover.
 
 ## 7. Cuts
 
-_Final list at Phase 9._ Decided so far:
+The final list. Everything here was a real decision, not an oversight -
+each either has its full reasoning written up elsewhere in this document
+(linked) or is small enough to explain in place.
 
 - **Discovery runs on a local model** (Ollama) rather than a hosted frontier
-  model. This is a design position, not only a budget one: back-office banking
+  model. A design position, not only a budget one: back-office banking
   screens carry member names, account numbers and balances in every
   observation, and no institution is going to pipe those to a third-party
   inference API. Local-first discovery is a data-residency property. The
   provider sits behind a one-line seam, so re-running discovery on a hosted
-  frontier model is an environment variable. The honest cost is capability —
-  a small model needs a cleaner observation format to succeed, which is itself
-  the point being tested.
+  frontier model is an environment variable - `src/discovery/providers/
+  google.ts` exists specifically to keep that claim checkable, but only two
+  providers are implemented (Ollama, Google); no third was built, since
+  breadth of provider support was never the thing being evaluated.
 - **Exactly two stretch goals**, per the brief's cap: cross-tenant overlay
-  reuse, and an agent-facing capability catalog. Multi-run stability is not
-  counted as a third — replaying N times and diffing the results is evidence
-  for the determinism requirement in §3.3, not an extra feature.
+  reuse, and an agent-facing capability catalog (§4). Multi-run stability is
+  not counted as a third - replaying N times and diffing the results is
+  evidence for the determinism requirement in §3, not an extra feature.
 - **The target application is a prop.** Deliberately hostile markup, seeded
   in-memory data, stub authentication, no persistence.
+- **Only a web `Surface` adapter exists.** The desktop claim is structurally
+  argued (§1) - the interface and action vocabulary were shaped by it from
+  Phase 0 - but nobody has written a Windows UI Automation or macOS AX
+  adapter to prove it. Building and testing one is a multi-day task
+  orthogonal to what this brief evaluates.
+- **A capability's `approval` field is a one-line JSON edit, not a CLI
+  command.** `render.ts` exists so a human has something real to review
+  before making that edit; a dedicated `npm run approve` would be tooling
+  around a single string field. Every artifact committed in this repository
+  is still `draft` because nobody has done that review yet, not because the
+  mechanism to flip it is missing.
+- **A human's own actions during a handoff are not individually traced**
+  (§5) - only the moment control changes hands and the state resume observes
+  when it re-checks. Recording live interaction would mean instrumenting the
+  page itself, not the interpreter loop.
+- **The recorded model cassette (`planner.jsonl`) is not redacted** (§6) - a
+  narrower, un-exercised gap than the one this project found and fixed for
+  everything else, kept because a redacted cassette could not reproduce the
+  exchange it exists to replay.
+- **No outcome is declared on the real committed artifact.** Replaying it
+  against a member who triggers a real permission-denial screen fails
+  honestly (`CHECKPOINT_FAILED`) rather than being misclassified as a
+  business answer, but turning that into a declared `hard_failure` is a
+  reviewer's edit this project identified concretely (§3) without making.
+- **The original `config/tenants/*.json` scaffold from Phase 0 was removed,
+  not filled in** (§4) - a flat text-substitution overlay proved sufficient
+  once there was an actual second tenant to test against, and the more
+  elaborate `stepOverrides`/`outcomeOverrides` structure it sketched was
+  speculative complexity for a scenario this project never exercised.
+- **Screenshot-and-coordinates UI grounding was considered and rejected**
+  (§1) in favour of the accessibility-tree node graph, on cost, brittleness
+  and replay-determinism grounds specific to this problem.

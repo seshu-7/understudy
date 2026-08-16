@@ -11,6 +11,17 @@ npm run target-app     # http://127.0.0.1:4501/servicing/
 Any operator id signs on. No credential is stored or checked, and no real
 personal data appears anywhere — the members are invented.
 
+A second tenant, same server code, one rebranded control — `target-app/
+tenants.ts` — runs standalone on its own port:
+
+```bash
+TARGET_APP_PORT=4502 TARGET_APP_TENANT=northstar npm run target-app
+```
+
+Northstar renames the member-search button from "Search" to "Find Member."
+Every other screen, and the seeded data, is identical. See REPORT.md §4 for
+what that one rename does to a capability recorded against the tenant above.
+
 ## Why build one instead of using a public demo site
 
 Three reasons, in order of weight.

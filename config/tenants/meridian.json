@@ -1,9 +1,0 @@
-{
-  "$comment": "The base tenant. A capability recorded here is the one other tenants running the same vendor product inherit from.",
-  "tenant": "meridian",
-  "displayName": "Meridian Credit Union",
-  "app": "corevantage-servicing",
-  "appVersion": "7.2",
-  "entryPoint": "http://127.0.0.1:4501/servicing",
-  "overlay": null
-}

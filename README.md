@@ -14,9 +14,11 @@ goal ──▶ discovery (LLM drives the UI) ──▶ trace ──▶ compiler 
                                               (no model, repeatable, free)
 ```
 
-> **Status: in progress.** Phase 0 of 9. This README grows as the system does;
-> the setup and demo sections below are placeholders until the pieces they
-> describe exist.
+Built across nine phases against a deliberately hostile legacy banking
+console, with a real local model driving discovery at every step and the
+resulting evidence committed alongside the code, not asserted in prose.
+[REPORT.md](./REPORT.md) is the full design write-up, including the bugs a
+real run caught and how they were fixed, and the cuts made along the way.
 
 ## Why it is built this way
 
@@ -25,7 +27,8 @@ Four decisions carry the design. Each is argued properly in [REPORT.md](./REPORT
 **1. Perception is a normalised UI graph, never raw markup.** A surface adapter
 emits nodes with a role, an accessible name, state and relationships. The model
 never sees HTML. This is what makes the desktop story a real seam rather than a
-paragraph of intent — Windows UI Automation and macOS AX produce the same shape.
+paragraph of intent — Windows UI Automation and macOS AX produce the same shape,
+though only the web adapter is actually built and tested here (REPORT.md §7).
 
 **2. Controls are addressed by scored evidence, not by selector.** Each step
 records a bundle — role, accessible name, nearby label, containing section,
@@ -33,15 +36,15 @@ relative anchor, ordinal — and replay scores every candidate node against it. 
 unique winner above threshold wins; anything else is `AMBIGUOUS_TARGET` and a
 hard stop. It refuses to guess, and it can explain why it matched.
 
-**3. The three-way outcome taxonomy lives in the schema.** Every capability
-declares what a legitimate business answer looks like ("no such member"), what
+**3. The three-way outcome taxonomy lives in the schema.** Every capability can
+declare what a legitimate business answer looks like ("no such member"), what
 is recoverable and with what *bounded* remedy, and what is a hard failure. The
 glossary in the brief calls conflating the first with the third the most common
-design mistake in this problem; making it declarative is how we avoid it.
+design mistake in this problem; making it declarative is how this avoids it.
 
 **4. Control transfer is a lease, not a callback.** Escalation releases the
-session; a human drives the *same* live session; their actions are captured into
-the same trace; resume re-verifies the next step's precondition before
+session; a human drives the *same* live session, proven against a real browser
+in `test/replay/resume-web.test.ts`; resume re-verifies its precondition before
 continuing rather than blindly picking up where it left off.
 
 ## Running it costs nothing
@@ -51,42 +54,144 @@ network. That is not only a budget decision. Back-office banking screens carry
 member names, account numbers and balances in every observation, and no
 institution is going to pipe those to a third-party inference API. Local-first
 discovery is a data-residency property; the provider sits behind a one-line seam
-so anyone who wants to run it on a hosted frontier model can.
+(`src/discovery/providers/`) so anyone who wants to run it on a hosted frontier
+model can, without touching the loop itself.
 
 Replay makes **zero** model calls by construction. That is the entire point of
-the system.
+the system, checked in `evidence/determinism-1786838165392/`, not just claimed.
 
 ## Setup
 
-_Phase 0 — not yet written. Will cover: prerequisites, `npm install`, pulling
-the local model, starting the target application, and how to run everything
-without any live service._
+Requires Node 22+, [Ollama](https://ollama.com) running locally, and Playwright's
+bundled Chromium.
+
+```bash
+npm install
+npx playwright install chromium
+
+ollama pull qwen2.5:7b-instruct   # the model every committed evidence run used
+
+cp .env.example .env              # defaults already cost $0 and need no account
+```
+
+The target application is a self-contained legacy banking console (plain
+`node:http`, no framework, hand-written HTML on purpose — see
+[`target-app/README.md`](./target-app/README.md)). Start it in one terminal
+and leave it running:
+
+```bash
+npm run target-app
+# [target-app] CoreVantage Servicing (meridian) on http://127.0.0.1:4501/servicing/
+```
+
+Everything below runs against that server, in a second terminal.
 
 ## Demo path
 
-_Phase 0 — not yet written. Will give the exact commands to run the agent
-against a goal and then replay the resulting artifact._
+**1. Discover.** An LLM drives the live UI to work out a task with no script,
+no selector, and no prior knowledge of the screen. This is the one step that
+calls a model — everything after it is free and repeatable.
+
+```bash
+npm run discover -- --goal "look up member 100234 and read their current savings balance"
+# writes evidence/discovery-<runId>/
+```
+
+Real evidence from this exact command is already committed:
+[`evidence/discovery-1786836008257/`](./evidence/discovery-1786836008257/).
+`UNDERSTUDY_CASSETTE=replay` (the `.env.example` default) replays a recorded
+exchange instead of calling Ollama at all — the same five decisions, in
+seconds, with zero model calls physically possible; see
+[`evidence/discovery-1786834288146/`](./evidence/discovery-1786834288146/).
+
+**2. Compile.** Distil the trace into a typed, versioned capability — parameters
+inferred from what varied, checkpoints inferred from what proved each step
+worked, outputs traced back to a real node on screen.
+
+```bash
+npm run compile -- evidence/discovery-1786836008257/summary.json \
+  --id corevantage_servicing.member_savings_balance \
+  --name "Look up a member's savings balance"
+# writes artifacts/<id>.v<version>.json and the human-readable .md alongside it
+```
+
+The real output is committed:
+[`artifacts/corevantage_servicing.member_savings_balance.v1.json`](./artifacts/corevantage_servicing.member_savings_balance.v1.json)
+/ [`.md`](./artifacts/corevantage_servicing.member_savings_balance.v1.md).
+
+**3. Replay.** Zero model calls. Same artifact, same inputs, same path, by
+construction, not by tendency.
+
+```bash
+npm run replay -- artifacts/corevantage_servicing.member_savings_balance.v1.json \
+  --input member_number=100234
+```
+
+Try a member the capability was never recorded against
+(`--input member_number=100412`, three accounts instead of two) to see the
+same artifact generalise, not just replay verbatim — real evidence in
+[`evidence/replay-1786838058351/`](./evidence/replay-1786838058351/), written
+up in REPORT.md §2.
+
+**4. Call it like an agent would.** The capability catalog projects every
+artifact into an Anthropic-tool-use-shaped definition — typed inputs, typed
+outputs, nothing an integration has to guess.
+
+```bash
+npm run catalog -- --tools
+```
+
+**5. Reuse across tenants, without re-recording.** The same capability, against
+a second real institution running the same vendor software with one button
+renamed — see REPORT.md §4 for what actually happens *without* this step
+first (not what you'd guess).
+
+```bash
+TARGET_APP_PORT=4502 TARGET_APP_TENANT=northstar npm run target-app   # third terminal
+
+npm run overlay -- artifacts/corevantage_servicing.member_savings_balance.v1.json \
+  --tenant northstar --entry-point http://127.0.0.1:4502/servicing/login.asp \
+  --override "Search=Find Member"
+
+npm run replay -- artifacts/corevantage_servicing.member_savings_balance.northstar.v1.json \
+  --input member_number=100234 --policy config/policy.northstar.json
+```
+
+## Running the tests
+
+```bash
+npm test
+```
+
+187 tests, several of them against the real target app and a real headless
+browser (Playwright), not fixtures standing in for either — including the
+cross-tenant replay above and the escalation/handoff flow, both checked
+against real browser sessions in `test/`. No test calls a model; the one
+`Planner` a live model could reach is never exercised outside `npm run
+discover` itself.
 
 ## Layout
 
 | Path | What lives there |
 | --- | --- |
 | `src/surface/` | The perception and action boundary — snapshots, descriptors, the matcher |
-| `src/discovery/` | The LLM observe → decide → act loop |
-| `src/artifact/` | Capability schema and the trace → capability compiler |
-| `src/replay/` | The zero-LLM interpreter |
-| `src/policy/` | Allowlist, risk tiers, redaction |
-| `src/session/` | Control lease and human handoff |
-| `src/operator/` | Minimal operator console |
-| `src/catalog/` | Agent-facing capability surface |
+| `src/discovery/` | The LLM observe → decide → policy-gate → act → record loop, and the redaction/policy modules it enforces |
+| `src/artifact/` | Capability schema, the trace → capability compiler, the tenant overlay, the human-readable render |
+| `src/replay/` | The zero-model interpreter, the session lease, and the escalation/resume mechanism |
+| `src/catalog/` | The agent-facing capability surface — list, tool-definition projection, dispatch |
+| `src/cli/` | `discover` / `compile` / `replay` / `catalog` / `overlay`, one file each |
 | `target-app/` | The legacy back-office application being automated, and a second tenant variant |
-| `artifacts/` | Saved capabilities |
-| `evidence/` | Discovery and replay run evidence |
+| `config/` | Policy (allowlist, risk tiers, redaction) — shipped as reviewable examples, never silent defaults |
+| `artifacts/` | Saved capabilities — real ones, compiled or overlaid, not fixtures |
+| `evidence/` | What actually happened when discovery and replay ran, committed on purpose |
+| `test/` | Unit tests against fakes for logic, integration tests against the real app and a real browser for everything that touches one |
 
 ## Documents
 
-- [REPORT.md](./REPORT.md) — the design write-up
-- [evidence/](./evidence/) — what actually happened when it ran
+- [REPORT.md](./REPORT.md) — the design write-up, including trade-offs, bugs a real run caught, and cuts
+- [evidence/README.md](./evidence/README.md) — an index of what actually happened when it ran
+- [artifacts/README.md](./artifacts/README.md) — what's saved and how it got there
+- [target-app/README.md](./target-app/README.md) — the legacy application being automated
 
 ## License
 
