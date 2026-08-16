@@ -22,15 +22,21 @@ import { DECISION_JSON_SCHEMA, type Planner, type PlannerContext, type PlannerDe
  * schema constraint. Neither Ollama's generic `think: false` request field
  * nor Qwen3's own documented `/no_think` directive suppressed it on this
  * build; `think: false` only moved the reasoning text into the `content`
- * field instead of removing it. Switching to qwen2.5:3b-instruct - about a
- * quarter the download, no hybrid-thinking mode - brought a realistic
- * decision down to roughly 20 seconds with a correct result, once the system
- * prompt was made explicit about acting on the screen as it currently is
- * rather than skipping ahead (see the comment on systemPrompt() in
- * planner.ts). The lesson generalises: for a CPU-bound, wall-clock-bounded
- * loop like this one, an unconditionally-reasoning model is a worse default
- * than a smaller model that answers directly, even though it has more
- * parameters.
+ * field instead of removing it. The lesson generalises: for a CPU-bound,
+ * wall-clock-bounded loop like this one, an unconditionally-reasoning model
+ * is a worse default than a smaller model that answers directly, even
+ * though it has more parameters.
+ *
+ * Within the qwen2.5 instruct family, smaller is not automatically better.
+ * qwen2.5:3b-instruct answers in roughly 20 seconds but was measured giving
+ * up early (a `dead_end` from three repeated decisions) on the same goal
+ * qwen2.5:7b-instruct completes reliably in about 90 seconds. Every discovery
+ * run committed to `evidence/` in this repository - the ones this project's
+ * own claims are checked against - used qwen2.5:7b-instruct, so that is the
+ * default: the model actually proven to work, not the faster one that
+ * merely seemed like it should. 3b remains a legitimate choice for faster
+ * iteration on a simpler goal; it just is not what this repository's own
+ * evidence stands behind.
  */
 
 interface OllamaChatResponse {
@@ -58,7 +64,7 @@ export class OllamaPlanner implements Planner {
 
   constructor(opts: OllamaPlannerOptions) {
     this.host = opts.host ?? "http://127.0.0.1:11434";
-    this.model = opts.model ?? "qwen2.5:3b-instruct";
+    this.model = opts.model ?? "qwen2.5:7b-instruct";
     this.systemPrompt = opts.systemPrompt;
     // Measured, not guessed: a single decision against a moderately-sized
     // screen took 95s on qwen2.5:7b-instruct on this CPU-only machine, almost

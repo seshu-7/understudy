@@ -1,11 +1,14 @@
 import { DECISION_JSON_SCHEMA, type Planner, type PlannerContext, type PlannerDecision, type PlannerResult } from "../planner.js";
 
 /**
- * Google AI Studio's free tier, used only for the cross-model evidence run in
- * Phase 8 - a second model discovering the same goal, so the compiled
- * artifacts can be compared. It exists behind this file and nowhere else,
+ * Google AI Studio's free tier - a second, working `Planner` implementation
+ * that exists behind this file and nowhere else in the discovery loop,
  * proving the provider seam is real rather than asserted: swapping the model
- * that drives discovery is a constructor call, not a rewrite.
+ * that drives discovery is a constructor call, not a rewrite. No evidence in
+ * this repository was recorded with it; every committed discovery run used
+ * Ollama (REPORT.md §7 explains why that is the default worth standing
+ * behind, not merely an option). This file is what makes "the provider sits
+ * behind a one-line seam" (REPORT.md §1) a checkable claim instead of one.
  *
  * `responseSchema` is Gemini's equivalent of Ollama's `format` - constrained
  * JSON output from the same decision schema every provider shares.
