@@ -13,6 +13,8 @@
     "discover": "tsx src/cli/discover.ts",
     "compile": "tsx src/cli/compile.ts",
     "replay": "tsx src/cli/replay.ts",
+    "catalog": "tsx src/cli/catalog.ts",
+    "overlay": "tsx src/cli/overlay.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "test": "vitest run",

@@ -37,6 +37,7 @@ interface Args {
   inputs: Record<string, string>;
   attended: boolean;
   headless: boolean;
+  policyPath: string;
 }
 
 function parseArgs(argv: readonly string[]): Args {
@@ -44,12 +45,16 @@ function parseArgs(argv: readonly string[]): Args {
   const inputs: Record<string, string> = {};
   let attended = true;
   let headless = true;
+  let policyPath: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === "--unattended") {
       attended = false;
     } else if (flag === "--headed") {
       headless = false;
+    } else if (flag === "--policy") {
+      policyPath = argv[++i];
+      if (!policyPath) throw new Error("missing value after --policy, expected --policy path/to/policy.json");
     } else if (flag === "--input") {
       const pair = argv[++i];
       if (!pair) throw new Error("missing value after --input, expected --input name=value");
@@ -61,8 +66,8 @@ function parseArgs(argv: readonly string[]): Args {
     }
   }
   const artifactPath = positional[0];
-  if (!artifactPath) throw new Error("usage: npm run replay -- <path/to/artifact.json> [--input name=value ...] [--unattended] [--headed]");
-  return { artifactPath, inputs, attended, headless };
+  if (!artifactPath) throw new Error("usage: npm run replay -- <path/to/artifact.json> [--input name=value ...] [--unattended] [--headed] [--policy path]");
+  return { artifactPath, inputs, attended, headless, policyPath: policyPath ?? join("config", "policy.example.json") };
 }
 
 function report(result: ReplayResult, totalSteps: number): void {
@@ -83,7 +88,7 @@ async function main(): Promise<void> {
   const raw = JSON.parse(await readFile(args.artifactPath, "utf8")) as unknown;
   const capability = parseCapability(raw);
 
-  const policyPath = join(process.cwd(), "config", "policy.example.json");
+  const policyPath = join(process.cwd(), args.policyPath);
   const policyRaw = JSON.parse(await readFile(policyPath, "utf8")) as RawPolicyConfig;
   const policy = loadPolicy(policyRaw);
 
