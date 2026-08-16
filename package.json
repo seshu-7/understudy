@@ -12,6 +12,7 @@
     "target-app": "tsx target-app/main.ts",
     "discover": "tsx src/cli/discover.ts",
     "compile": "tsx src/cli/compile.ts",
+    "replay": "tsx src/cli/replay.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "test": "vitest run",
