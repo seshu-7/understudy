@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createInterface } from "node:readline/promises";
 
 import { parseCapability } from "../artifact/schema.js";
 import { loadEnvFile } from "../config/env.js";
 import { loadPolicy, type RawPolicyConfig } from "../discovery/policy.js";
-import { ReplayError, replayCapability } from "../replay/replay.js";
+import { readIntervention } from "../replay/intervention.js";
+import { ReplayError, replayCapability, resumeCapability } from "../replay/replay.js";
 import { ReplayTraceWriter } from "../replay/trace.js";
+import type { ReplayResult } from "../replay/types.js";
 import { WebSurface } from "../surface/web/adapter.js";
 
 /**
@@ -17,6 +20,16 @@ import { WebSurface } from "../surface/web/adapter.js";
  * calls. Attended by default - the safer default for a human running this
  * from a terminal - so `--unattended` has to be asked for explicitly, the
  * same way an approval has to be explicit before it does anything.
+ *
+ * On an escalated, resumable result, this is what actually makes "the human
+ * drives the same live session" (REPORT.md §5) true rather than aspirational:
+ * the browser is left open, not closed, and the process pauses on stdin
+ * rather than exiting - a fresh `npm run replay` invocation later would be a
+ * new WebSurface against the app's starting screen, not the session a human
+ * is meant to pick up mid-flow. `--headed` is what makes the paused browser
+ * actually visible to someone at the terminal; escalating headless still
+ * works (the intervention and evidence are real either way) but there is
+ * nothing on screen for a human to drive.
  */
 
 interface Args {
@@ -52,6 +65,17 @@ function parseArgs(argv: readonly string[]): Args {
   return { artifactPath, inputs, attended, headless };
 }
 
+function report(result: ReplayResult, totalSteps: number): void {
+  console.log("");
+  console.log(`[replay] status: ${result.status}`);
+  console.log(`[replay] steps attempted: ${result.stepsAttempted}/${totalSteps}`);
+  if (result.recoveries.length > 0) console.log(`[replay] recoveries: ${JSON.stringify(result.recoveries)}`);
+  if (result.status === "success") console.log(`[replay] outputs:`, result.outputs);
+  if (result.status === "business_outcome") console.log(`[replay] outcome "${result.outcome}":`, result.data);
+  if (result.status === "failed") console.log(`[replay] failure [${result.failure.code}] at step ${result.failure.stepIndex}: ${result.failure.message}`);
+  if (result.status === "escalated") console.log(`[replay] escalated: ${result.reason}`);
+}
+
 async function main(): Promise<void> {
   await loadEnvFile();
   const args = parseArgs(process.argv.slice(2));
@@ -72,20 +96,27 @@ async function main(): Promise<void> {
   console.log(`[replay] target: ${capability.target.entryPoint}`);
 
   const surface = await WebSurface.launch(capability.target.entryPoint, { headless: args.headless });
+  let leaveSurfaceOpenForHuman = false;
   try {
-    const result = await replayCapability(capability, args.inputs, { runId, surface, policy, trace, attended: args.attended });
+    let result = await replayCapability(capability, args.inputs, { runId, surface, policy, trace, attended: args.attended });
 
-    console.log("");
-    console.log(`[replay] status: ${result.status}`);
-    console.log(`[replay] steps attempted: ${result.stepsAttempted}/${capability.steps.length}`);
-    if (result.recoveries.length > 0) console.log(`[replay] recoveries: ${JSON.stringify(result.recoveries)}`);
-    if (result.status === "success") console.log(`[replay] outputs:`, result.outputs);
-    if (result.status === "business_outcome") console.log(`[replay] outcome "${result.outcome}":`, result.data);
-    if (result.status === "failed") console.log(`[replay] failure [${result.failure.code}] at step ${result.failure.stepIndex}: ${result.failure.message}`);
-    if (result.status === "escalated") console.log(`[replay] escalated: ${result.reason}`);
+    while (result.status === "escalated" && result.resumable) {
+      console.log("");
+      console.log(`[replay] handoff: ${result.reason}`);
+      console.log(`[replay] the browser is staying open at ${trace.runDir} - drive it yourself now.`);
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      await rl.question("Press Enter once you're done (Ctrl+C to abandon and leave the browser open): ");
+      rl.close();
+
+      const intervention = await readIntervention(trace.runDir);
+      result = await resumeCapability(intervention, capability, args.inputs, { runId, surface, policy, trace, attended: args.attended });
+    }
+
+    report(result, capability.steps.length);
     console.log(`[replay] evidence written to ${runDir}`);
 
     if (result.status === "failed") process.exitCode = 1;
+    if (result.status === "escalated") leaveSurfaceOpenForHuman = true;
   } catch (error) {
     if (error instanceof ReplayError) {
       console.error(`[replay] refused: ${error.message}`);
@@ -94,7 +125,7 @@ async function main(): Promise<void> {
       throw error;
     }
   } finally {
-    await surface.close();
+    if (!leaveSurfaceOpenForHuman) await surface.close();
   }
 }
 
