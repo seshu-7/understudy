@@ -13,7 +13,7 @@ import type { ReplayResult } from "./types.js";
 export interface ReplayTraceEvent {
   ts: string;
   index: number;
-  kind: "resolve" | "policy" | "action" | "checkpoint" | "recovery" | "outcome" | "stop";
+  kind: "resolve" | "policy" | "action" | "checkpoint" | "recovery" | "outcome" | "handoff" | "stop";
   data: unknown;
 }
 

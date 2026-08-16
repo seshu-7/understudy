@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Capability, OutcomeSpec, SemanticDescriptor, Step } from "../../src/artifact/schema.js";
 import { loadPolicy, type Policy, type RawPolicyConfig } from "../../src/discovery/policy.js";
-import { ReplayError, replayCapability } from "../../src/replay/replay.js";
+import { readIntervention } from "../../src/replay/intervention.js";
+import { ReplayError, replayCapability, resumeCapability } from "../../src/replay/replay.js";
 import { ReplayTraceWriter } from "../../src/replay/trace.js";
 import { nodeRef, type Action, type CapturedEvidence, type Surface, type UINode, type UISnapshot } from "../../src/surface/types.js";
 
@@ -249,7 +250,16 @@ describe("unattended-mode gates", () => {
     );
     const result = await replayCapability(makeCapability(), {}, { ...deps(policy, false), surface });
     expect(result.status).toBe("escalated");
-    if (result.status === "escalated") expect(result.resumable).toBe(false);
+    // Phase 7: this is a real, resumable handoff, not a dead end - see
+    // "resuming after handoff" below for resumeCapability actually
+    // continuing from here.
+    if (result.status === "escalated") {
+      expect(result.resumable).toBe(true);
+      const intervention = await readIntervention(runDir);
+      expect(intervention.resumeAt).toBe(1); // the step *after* the blocked one
+      expect(intervention.precondition).toEqual({ detect: { kind: "node_present", descriptor: resultText }, expect: "matched" });
+      expect(intervention.lease.owner).toBe("human");
+    }
   });
 
   it("fails closed on an irreversible step when policy says block instead of escalate", async () => {
@@ -469,5 +479,111 @@ describe("redaction inside replay", () => {
     const snapshotContents = await readFile(join(runDir, "failure", "snapshot.json"), "utf8");
     expect(snapshotContents).not.toContain("hunter2");
     expect(snapshotContents).toContain("[redacted:field]");
+  });
+});
+
+describe("resuming after handoff", () => {
+  it("continues at the step after an irreversible one, once a human's own action leaves the expected checkpoint behind", async () => {
+    // Step 0 is the irreversible one a human must perform themselves; step 1
+    // is what should execute *after* resume - proving this is a genuine
+    // continuation of the same run, not just a re-finalisation of step 0.
+    const continueButton = descriptor({ role: "button", name: { kind: "normalized", value: "Continue" } });
+    const doneText = descriptor({ role: "text", name: { kind: "normalized", value: "Done" } });
+    const capability = makeCapability({
+      steps: [
+        makeStep({ index: 0, action: { kind: "click", target: searchButton }, checkpoint: { kind: "node_present", descriptor: resultText } }),
+        makeStep({ index: 1, intent: "click Continue", action: { kind: "click", target: continueButton }, checkpoint: { kind: "node_present", descriptor: doneText } }),
+      ],
+    });
+    const policy = makePolicy(
+      { onIrreversible: "escalate" },
+      { default: "safe", rules: [{ match: { nameMatches: "search" }, tier: "irreversible" }] },
+    );
+
+    let snapshotProvider = () => snap([node({ role: "button", name: "Search" })]);
+    const surface = new ScriptedSurface(() => snapshotProvider());
+
+    const stopped = await replayCapability(capability, {}, { ...deps(policy, false), surface });
+    expect(stopped.status).toBe("escalated");
+    if (stopped.status !== "escalated") return;
+
+    const intervention = await readIntervention(runDir);
+    expect(intervention.resumeAt).toBe(1);
+    expect(intervention.lease).toEqual({ runId: "test", capabilityId: capability.id, owner: "human", token: 1 });
+
+    // "A human" performed the search live; the result screen and the next
+    // control are now up. Only *this* click (step 1's) should ever reach
+    // the surface - step 0 was never automation's to retry.
+    let phase: "afterSearch" | "afterContinue" = "afterSearch";
+    snapshotProvider = () =>
+      phase === "afterSearch" ? snap([node({ role: "text", name: "Result" }), node({ role: "button", name: "Continue" })]) : snap([node({ role: "text", name: "Done" })]);
+    const originalAct = surface.act.bind(surface);
+    surface.act = async (action) => {
+      if (action.kind === "click") phase = "afterContinue";
+      await originalAct(action);
+    };
+
+    const resumed = await resumeCapability(intervention, capability, {}, { ...deps(policy, false), surface });
+    expect(resumed.status).toBe("success");
+    expect(surface.acted).toHaveLength(1);
+    expect(surface.acted[0]!.kind).toBe("click");
+  });
+
+  it("retries the same step, not the next one, after a reauthenticate handoff clears", async () => {
+    const loginPrompt = descriptor({ role: "dialog", name: { kind: "normalized", value: "Session Expired" } });
+    const expired: OutcomeSpec = {
+      name: "session_expired",
+      class: "recoverable",
+      description: "the session timed out",
+      detect: { kind: "node_present", descriptor: loginPrompt },
+      remedy: { kind: "reauthenticate" },
+    };
+    let phase: "expired" | "search" | "result" = "expired";
+    const surface = new ScriptedSurface(() => {
+      if (phase === "expired") return snap([node({ role: "dialog", name: "Session Expired" })]);
+      if (phase === "search") return snap([node({ role: "button", name: "Search" })]);
+      return snap([node({ role: "text", name: "Result" })]);
+    });
+    const originalAct = surface.act.bind(surface);
+    surface.act = async (action) => {
+      if (action.kind === "click" && phase === "search") phase = "result";
+      await originalAct(action);
+    };
+
+    const capability = makeCapability({ outcomes: [expired] });
+    const stopped = await replayCapability(capability, {}, { ...deps(makePolicy()), surface });
+    expect(stopped.status).toBe("escalated");
+    if (stopped.status !== "escalated") return;
+
+    const intervention = await readIntervention(runDir);
+    expect(intervention.resumeAt).toBe(0);
+    expect(intervention.precondition).toEqual({ detect: expired.detect, expect: "cleared" });
+
+    phase = "search"; // "the human" logged back in; the search screen is up again
+    const resumed = await resumeCapability(intervention, capability, {}, { ...deps(makePolicy()), surface });
+    expect(resumed.status).toBe("success");
+  });
+
+  it("refuses to continue when the precondition still does not hold, rather than trusting that the human is finished", async () => {
+    const policy = makePolicy(
+      { onIrreversible: "escalate" },
+      { default: "safe", rules: [{ match: { nameMatches: "search" }, tier: "irreversible" }] },
+    );
+    // Nothing about the screen ever changes - the human hasn't actually done it.
+    const surface = new ScriptedSurface(() => snap([node({ role: "button", name: "Search" })]));
+
+    const stopped = await replayCapability(makeCapability(), {}, { ...deps(policy, false), surface });
+    expect(stopped.status).toBe("escalated");
+    if (stopped.status !== "escalated") return;
+    const intervention = await readIntervention(runDir);
+
+    const resumed = await resumeCapability(intervention, makeCapability(), {}, { ...deps(policy, false), surface });
+    expect(resumed.status).toBe("failed");
+    if (resumed.status === "failed") {
+      expect(resumed.failure.code).toBe("CHECKPOINT_FAILED");
+      expect(resumed.failure.message).toContain(intervention.interventionId);
+    }
+    // Nothing was retried on the human's unverified word.
+    expect(surface.acted).toHaveLength(0);
   });
 });

@@ -4,9 +4,11 @@ import { checkAction, type Policy } from "../discovery/policy.js";
 import { redactSnapshot } from "../discovery/redact.js";
 import { match } from "../surface/match.js";
 import { coerceOutput, evaluateDetector, extractOutput, type DetectorResult } from "./detect.js";
+import { type Intervention, writeIntervention } from "./intervention.js";
+import { acquire, initialLease, type SessionLease } from "./lease.js";
 import { ReplayTraceWriter } from "./trace.js";
 import type { Action, NodeRef, Surface, UISnapshot } from "../surface/types.js";
-import type { FailureCode, RecoveryRecord, ReplayResult } from "./types.js";
+import type { FailureCode, RecoveryRecord, ReplayCommon, ReplayResult } from "./types.js";
 
 /**
  * The interpreter. Zero model calls, by construction: every decision here is
@@ -38,6 +40,17 @@ export interface ReplayDeps {
    *  about who is watching it touch it. */
   attended: boolean;
   pollIntervalMs?: number;
+  /** Step index to begin at - 0 for a fresh run. `resumeCapability` sets
+   *  this to `Intervention.resumeAt` to continue the same run rather than
+   *  starting over. */
+  startAt?: number;
+  /** Recoveries already recorded before a resume, carried forward so the
+   *  final result's history is not truncated at the handoff. */
+  initialRecoveries?: readonly RecoveryRecord[];
+  /** Who owns the live session right now. Defaults to a fresh
+   *  automation-owned lease; `resumeCapability` passes the one from the
+   *  intervention, re-acquired for automation. */
+  lease?: SessionLease;
 }
 
 const TIER_ORDER: Record<RiskTier, number> = { safe: 0, elevated: 1, irreversible: 2 };
@@ -185,6 +198,8 @@ export async function replayCapability(
 ): Promise<ReplayResult> {
   const { runId, surface, policy, trace, attended } = deps;
   const pollIntervalMs = deps.pollIntervalMs ?? 500;
+  const startAt = deps.startAt ?? 0;
+  const lease = deps.lease ?? initialLease(runId, capability.id);
 
   if (capability.approval === "retired") {
     throw new ReplayError(`capability "${capability.id}" is retired and must not be replayed`);
@@ -202,8 +217,8 @@ export async function replayCapability(
 
   await trace.init();
   const startedAt = new Date().toISOString();
-  const recoveries: RecoveryRecord[] = [];
-  let stepsAttempted = 0;
+  const recoveries: RecoveryRecord[] = [...(deps.initialRecoveries ?? [])];
+  let stepsAttempted = startAt;
 
   const common = () => ({
     runId,
@@ -243,7 +258,39 @@ export async function replayCapability(
     });
   };
 
-  for (const step of capability.steps) {
+  /** Hands control to a human: persists a real, re-checkable Intervention -
+   *  not just a message - and marks the lease human-owned. `resumable` is
+   *  true because there is now a concrete `resumeCapability` call that will
+   *  actually continue this run, not a promise deferred to a later phase. */
+  const escalate = async (
+    step: Step,
+    reason: string,
+    snapshot: UISnapshot,
+    resumeAt: number,
+    precondition?: { detect: Detector; expect: "matched" | "cleared" },
+  ): Promise<ReplayResult> => {
+    const interventionId = `${runId}-${step.index}`;
+    const intervention: Intervention = {
+      interventionId,
+      runId,
+      capabilityId: capability.id,
+      capabilityVersion: capability.version,
+      createdAt: new Date().toISOString(),
+      reason,
+      observedLocation: snapshot.location,
+      resumeAt,
+      ...(precondition ? { precondition } : {}),
+      recoveriesSoFar: recoveries,
+      lease: acquire(lease, "human"),
+      status: "open",
+    };
+    await writeIntervention(trace.runDir, intervention);
+    await trace.event("handoff", step.index, { from: "automation", to: "human", interventionId, reason });
+    return finish({ status: "escalated", ...common(), interventionId, reason, resumable: true });
+  };
+
+  for (let i = startAt; i < capability.steps.length; i++) {
+    const step = capability.steps[i]!;
     let snapshot = await surface.observe();
 
     const fired = findFiredOutcome(capability.outcomes, snapshot);
@@ -267,7 +314,7 @@ export async function replayCapability(
       const remedy = fired.spec.remedy!;
       const outcome = await applyRemedy(fired.spec, remedy, surface, pollIntervalMs);
       if (outcome.kind === "escalate") {
-        return finish({ status: "escalated", ...common(), interventionId: `${runId}-${step.index}`, reason: outcome.reason, resumable: false });
+        return escalate(step, outcome.reason, snapshot, step.index, { detect: fired.spec.detect, expect: "cleared" });
       }
       recoveries.push({ stepIndex: step.index, outcome: fired.spec.name, class: "recoverable", attempts: outcome.attempts, succeeded: outcome.kind === "recovered" });
       await trace.event("recovery", step.index, { outcome: fired.spec.name, ...outcome });
@@ -324,7 +371,12 @@ export async function replayCapability(
       const gate = unattendedGate(policyDecision.tier, policy);
       if (!gate.allowed) {
         if (gate.escalate) {
-          return finish({ status: "escalated", ...common(), interventionId: `${runId}-${step.index}`, reason: gate.reason, resumable: false });
+          // A human is expected to perform *this exact step* themselves,
+          // since automation was refused it - resume continues at the next
+          // one rather than retrying it, and the precondition is the step's
+          // own checkpoint (its normal proof of having happened), when it
+          // has one to check.
+          return escalate(step, gate.reason, snapshot, step.index + 1, step.checkpoint ? { detect: step.checkpoint, expect: "matched" } : undefined);
         }
         return fail(step, "POLICY_BLOCKED", "action permitted unattended", gate.reason, gate.reason, undefined, snapshot);
       }
@@ -400,4 +452,74 @@ export async function replayCapability(
     const lastStep = capability.steps[capability.steps.length - 1]!;
     return fail(lastStep, "UNRECOGNISED_STATE", "every declared output re-extractable from the final screen", String(error), String(error), undefined, finalSnapshot);
   }
+}
+
+/**
+ * The other half of a handoff: continues the **same** run against the
+ * **same** live surface a human was just driving - `deps.surface` must be
+ * the identical instance `replayCapability` escalated with, still open,
+ * not a freshly launched one. REPORT.md §5's direction was explicit that
+ * this matters: a resume that reopened the browser would be starting over
+ * with extra steps, not actually resuming.
+ *
+ * Re-verifies the intervention's precondition against a fresh observation
+ * before doing anything else - a human saying "I'm done" is not itself
+ * evidence the blocking condition is actually gone, and proceeding on their
+ * word alone is exactly the kind of guess this project's matcher and
+ * checkpoints already refuse to make everywhere else.
+ */
+export async function resumeCapability(
+  intervention: Intervention,
+  capability: Capability,
+  inputs: Readonly<Record<string, string>>,
+  deps: ReplayDeps,
+): Promise<ReplayResult> {
+  const { surface, trace, policy } = deps;
+  const snapshot = await surface.observe();
+
+  if (intervention.precondition) {
+    const result = evaluateDetector(intervention.precondition.detect, snapshot);
+    const satisfied = intervention.precondition.expect === "matched" ? result.matched : !result.matched;
+    if (!satisfied) {
+      const shot = await surface.capture();
+      await trace.failureEvidence(shot.bytes, redactSnapshot(snapshot, policy.redaction));
+      const common: ReplayCommon = {
+        runId: intervention.runId,
+        capabilityId: capability.id,
+        capabilityVersion: capability.version,
+        startedAt: intervention.createdAt,
+        finishedAt: new Date().toISOString(),
+        stepsAttempted: intervention.resumeAt,
+        recoveries: intervention.recoveriesSoFar,
+        evidenceDir: trace.runDir,
+      };
+      const step = capability.steps[intervention.resumeAt];
+      const failure: ReplayResult = {
+        status: "failed",
+        ...common,
+        failure: {
+          code: intervention.precondition.expect === "matched" ? "CHECKPOINT_FAILED" : "RECOVERY_EXHAUSTED",
+          stepIndex: intervention.resumeAt,
+          stepIntent: step?.intent ?? "(resume point past the last step)",
+          expected:
+            intervention.precondition.expect === "matched"
+              ? "the step a human was asked to perform to now show its own checkpoint"
+              : "the condition that triggered the handoff to have cleared",
+          observed: result.observed,
+          message: `resume was requested for intervention "${intervention.interventionId}", but its precondition still does not hold - nothing was retried`,
+        },
+      };
+      await trace.result(failure);
+      return failure;
+    }
+  }
+
+  await trace.event("handoff", intervention.resumeAt, { from: "human", to: "automation", interventionId: intervention.interventionId });
+
+  return replayCapability(capability, inputs, {
+    ...deps,
+    startAt: intervention.resumeAt,
+    initialRecoveries: intervention.recoveriesSoFar,
+    lease: acquire(intervention.lease, "automation"),
+  });
 }

@@ -18,7 +18,7 @@ export type ReplayResult =
   | ReplayFailure
   | ReplayEscalated;
 
-interface ReplayCommon {
+export interface ReplayCommon {
   runId: string;
   capabilityId: string;
   capabilityVersion: number;
