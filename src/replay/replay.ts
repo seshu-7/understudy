@@ -1,6 +1,7 @@
 import { describeDetector, describeTarget } from "../artifact/format.js";
-import type { Capability, Detector, OutcomeSpec, Remedy, RiskTier, SemanticDescriptor, Step, ValueSource } from "../artifact/schema.js";
+import type { Capability, Detector, OutcomeSpec, ParamSpec, Remedy, RiskTier, SemanticDescriptor, Step, ValueSource } from "../artifact/schema.js";
 import { checkAction, type Policy } from "../discovery/policy.js";
+import { redactSnapshot } from "../discovery/redact.js";
 import { match } from "../surface/match.js";
 import { coerceOutput, evaluateDetector, extractOutput, type DetectorResult } from "./detect.js";
 import { ReplayTraceWriter } from "./trace.js";
@@ -64,6 +65,32 @@ function resolveValue(value: ValueSource, inputs: Readonly<Record<string, string
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isSensitiveValueSource(value: ValueSource, capability: Capability): boolean {
+  return value.kind === "param" && (capability.inputs.find((p: ParamSpec) => p.name === value.name)?.sensitive ?? false);
+}
+
+/** The concrete Action a step resolved to is what actually reaches the live
+ *  surface - correctly, it has to carry the real value for `act()` to work.
+ *  This is the same value with the same redaction discovery already applies
+ *  before anything is traced, for the same reason: a caller supplying a
+ *  `sensitive` parameter at replay time (the password itself, this time,
+ *  not a placeholder) must not have it land in trace.jsonl just because
+ *  replay - unlike discovery - has no planner-facing text to redact it out
+ *  of in the first place. */
+function redactActionForTrace(action: Action, stepAction: Step["action"], capability: Capability, policy: Policy): Action {
+  const placeholder = policy.redaction.placeholder.replace("{name}", "field");
+  if (action.kind === "fill" && stepAction.kind === "fill" && isSensitiveValueSource(stepAction.value, capability)) {
+    return { ...action, text: placeholder };
+  }
+  if (action.kind === "select" && stepAction.kind === "select" && isSensitiveValueSource(stepAction.value, capability)) {
+    return { ...action, option: placeholder };
+  }
+  if (action.kind === "navigate" && stepAction.kind === "navigate" && isSensitiveValueSource(stepAction.to, capability)) {
+    return { ...action, to: placeholder };
+  }
+  return action;
 }
 
 async function waitForDetector(
@@ -205,7 +232,10 @@ export async function replayCapability(
   ): Promise<ReplayResult> => {
     const snapshot = snapshotForEvidence ?? (await surface.observe());
     const shot = await surface.capture();
-    await trace.failureEvidence(shot.bytes, snapshot);
+    // Screenshots aside (a harder, separate problem - see REPORT.md §6), the
+    // node snapshot itself must never carry a sensitive field's live value
+    // into evidence, same as discovery's model-facing text never does.
+    await trace.failureEvidence(shot.bytes, redactSnapshot(snapshot, policy.redaction));
     return finish({
       status: "failed",
       ...common(),
@@ -305,7 +335,7 @@ export async function replayCapability(
     } catch (error) {
       return fail(step, "SURFACE_ERROR", "action executes without throwing", String(error), String(error), undefined, snapshot);
     }
-    await trace.event("action", step.index, { action });
+    await trace.event("action", step.index, { action: redactActionForTrace(action, step.action, capability, policy) });
 
     if (step.checkpoint) {
       const waited = await waitForDetector(step.checkpoint, surface, step.timeoutMs, pollIntervalMs);

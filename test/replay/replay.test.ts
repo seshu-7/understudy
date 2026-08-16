@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -24,6 +24,7 @@ function node(spec: {
   role: UINode["role"];
   name?: string;
   label?: string;
+  value?: string;
   ordinal?: number;
   visible?: boolean;
 }): UINode {
@@ -32,6 +33,7 @@ function node(spec: {
     role: spec.role,
     name: spec.name ?? "",
     ...(spec.label !== undefined ? { label: spec.label } : {}),
+    ...(spec.value !== undefined ? { value: spec.value } : {}),
     state: { disabled: false, readonly: false, required: false, focused: false },
     frame: [],
     ancestry: [],
@@ -75,6 +77,7 @@ function makePolicy(
   overrides: Partial<RawPolicyConfig["unattended"]> = {},
   risk: RawPolicyConfig["risk"] = { default: "safe", rules: [] },
   allowlist: Partial<RawPolicyConfig["allowlist"]> = {},
+  redactionFieldNames: readonly string[] = [],
 ): Policy {
   const raw: RawPolicyConfig = {
     allowlist: {
@@ -86,7 +89,7 @@ function makePolicy(
     },
     risk,
     unattended: { requiresApproval: "approved", maxTier: "elevated", onIrreversible: "escalate", ...overrides },
-    redaction: { patterns: [], fieldNames: [], placeholder: "[redacted:{name}]" },
+    redaction: { patterns: [], fieldNames: redactionFieldNames, placeholder: "[redacted:{name}]" },
   };
   return loadPolicy(raw);
 }
@@ -422,5 +425,49 @@ describe("input validation", () => {
     const surface = new ScriptedSurface(() => snap([]));
     const capability = makeCapability({ inputs: [{ name: "member_number", type: "string", description: "d", required: true }] });
     await expect(replayCapability(capability, {}, { ...deps(makePolicy()), surface })).rejects.toThrow(/missing required input/);
+  });
+});
+
+describe("redaction inside replay", () => {
+  it("sends the real value to the surface but never traces it, for a sensitive parameter", async () => {
+    const passwordField = descriptor({ role: "textbox", label: { kind: "normalized", value: "Password" } });
+    const before = snap([node({ role: "textbox", label: "Password" })]);
+    const after = snap([node({ role: "text", name: "Result" })]);
+    const surface = new ScriptedSurface((n) => (n === 0 ? before : after));
+    const capability = makeCapability({
+      inputs: [{ name: "password", type: "string", description: "d", required: true, sensitive: true }],
+      steps: [
+        makeStep({
+          action: { kind: "fill", target: passwordField, value: { kind: "param", name: "password" } },
+          checkpoint: { kind: "node_present", descriptor: resultText },
+        }),
+      ],
+    });
+
+    const result = await replayCapability(capability, { password: "hunter2" }, { ...deps(makePolicy()), surface });
+    expect(result.status).toBe("success");
+
+    // The live surface still has to receive the real secret to work at all.
+    expect(surface.acted).toHaveLength(1);
+    const acted = surface.acted[0]!;
+    expect(acted.kind).toBe("fill");
+    if (acted.kind === "fill") expect(acted.text).toBe("hunter2");
+
+    const traceContents = await readFile(join(runDir, "trace.jsonl"), "utf8");
+    expect(traceContents).not.toContain("hunter2");
+    expect(traceContents).toContain("[redacted:field]");
+  });
+
+  it("redacts a sensitive field's live value out of failure evidence", async () => {
+    const surface = new ScriptedSurface(() =>
+      snap([node({ role: "button", name: "Cancel" }), node({ role: "textbox", label: "Password", value: "hunter2" })]),
+    );
+    const policy = makePolicy(undefined, undefined, undefined, ["password"]);
+    const result = await replayCapability(makeCapability(), {}, { ...deps(policy), surface });
+    expect(result.status).toBe("failed");
+
+    const snapshotContents = await readFile(join(runDir, "failure", "snapshot.json"), "utf8");
+    expect(snapshotContents).not.toContain("hunter2");
+    expect(snapshotContents).toContain("[redacted:field]");
   });
 });

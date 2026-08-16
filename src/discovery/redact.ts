@@ -1,3 +1,5 @@
+import type { UINode, UISnapshot } from "../surface/types.js";
+
 /**
  * Redaction at the perception boundary.
  *
@@ -66,4 +68,25 @@ export function redactValue(value: string, label: string, policy: RedactionPolic
     return policy.placeholder.replace("{name}", "field");
   }
   return redactText(value, policy);
+}
+
+/** Same asymmetry as observe-format.ts's `lineFor`, applied to a whole live
+ *  snapshot instead of one rendered line: a node's `value` gets field-name
+ *  redaction (a Password textbox's current contents must never appear,
+ *  whether or not they happen to match a pattern), while `name`/`label` get
+ *  pattern redaction only, since those are captions, not secrets, and
+ *  blanking a field's own label is how a model already once lost the sign-on
+ *  screen entirely (see REPORT.md §6). This exists for evidence that persists
+ *  a *whole node*, not just formatted text for a planner - replay's failure
+ *  snapshots, specifically - where nothing upstream has redacted anything
+ *  yet, unlike the model-facing observation text discovery already builds
+ *  through `redactValue`/`redactText` directly. */
+export function redactSnapshot(snapshot: UISnapshot, policy: RedactionPolicy): UISnapshot {
+  const redactNode = (node: UINode): UINode => ({
+    ...node,
+    name: redactText(node.name, policy),
+    ...(node.label !== undefined ? { label: redactText(node.label, policy) } : {}),
+    ...(node.value !== undefined ? { value: redactValue(node.value, node.label ?? node.name, policy) } : {}),
+  });
+  return { ...snapshot, nodes: snapshot.nodes.map(redactNode) };
 }
