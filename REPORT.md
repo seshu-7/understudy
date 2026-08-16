@@ -1,6 +1,6 @@
 # Design write-up
 
-> **In progress — Phase 5 of 9.** Sections fill in as the decisions get made
+> **In progress — Phase 6 of 9.** Sections fill in as the decisions get made
 > and tested, not at the end from memory. Anything not yet built says so
 > plainly rather than describing an intention in the present tense.
 
@@ -231,9 +231,12 @@ continuing rather than blindly picking up where it left off.
 
 ## 6. Safety
 
-_Pending Phase 6._ Committed so far: `config/policy.example.json` defines an
-explicit allowlist of origins, routes and action kinds, risk tiers separating
-safe from elevated from irreversible, and redaction rules.
+`config/policy.example.json` defines an explicit allowlist of origins, routes
+and action kinds, risk tiers separating safe from elevated from irreversible,
+and redaction rules - enforced, respectively, by `checkAction`
+(`src/discovery/policy.ts`) and the redaction module below, in both discovery
+(`src/discovery/loop.ts`) and replay (`src/replay/replay.ts`, Phase 5's
+attended/unattended gating is written up in §3).
 
 Two decisions worth stating early. Policy is enforced on every action in
 **both** discovery and replay — a model exploring a back-office application is
@@ -262,6 +265,75 @@ A live discovery run surfaced this directly: the model repeatedly chose
 had been redacted out from under it. Fixed by scoping the field-name check to
 values only; a control's label and a plain text node's name get pattern
 redaction alone.
+
+**A third defect, in the same lineage, caught this phase by checking a claim
+against the code rather than by a run surfacing a symptom.**
+`src/discovery/redact.ts`'s own header states the guarantee plainly:
+*"everything downstream — the text sent to the planner, the trace written to
+disk, the evidence committed to the repo — is built from what this module
+returns, never from the raw snapshot."* That was true for the text a model
+*reads* (`formatObservation` redacts before anything reaches the planner) and
+false for the values a model *types*. `src/discovery/loop.ts` traced the raw
+`decision` object, the raw resolved `Action`, and stored that same raw action
+into `DiscoveredStep` — which `summary.json` persists and Phase 4's compiler
+reads directly — without ever passing through redaction. A fill into a field
+labelled "Password" would have had its real value sitting in plain text in
+committed evidence and, worse, baked as a hardcoded literal into the compiled
+capability, replayed identically and unrotatably forever. The target app's
+own login accepts any credential and stores nothing, so no run in this
+repository ever actually exposed one — but the compiler and the loop needed
+to be correct regardless of what this particular demo app happens to protect.
+
+Fixed at the same boundary the other two defects were: `DiscoveredStep` gains
+a `sensitive` flag, set once in the loop from the target's label against the
+same field-name list redaction already uses. The **live** action is never
+touched — `surface.act()` still receives the real value, because that is
+what makes the automation work — but what gets traced and what gets stored in
+`steps[]` is redacted from that point on. `compile.ts` reads the flag and
+takes a different path entirely for a sensitive step: always a required,
+`sensitive` parameter with no `example`, never a literal and never deduped
+against another sensitive field's value — deduping would be wrong here in a
+way it is not for an ordinary repeated value, since two different secrets
+redacted to the same placeholder text must not collapse into one parameter
+just because their (fake) recorded values match.
+
+Building the fix surfaced a second copy of the identical mistake, this time
+in Phase 5's own replay engine, which this project's evidence-first habit
+would otherwise have shipped for a whole phase before anyone noticed: a
+`sensitive` parameter's real value — supplied fresh by the *caller* at
+replay time, not recorded anywhere — still has to be resolved to a literal
+string to actually execute the fill, and that resolved action was being
+traced into `evidence/replay-*/trace.jsonl` verbatim. Separately, a live
+failure snapshot (`failure/snapshot.json`) persists whatever every visible
+control's current value happens to be at the moment replay gave up,
+including a password field's live contents if one happened to be on screen.
+Both are fixed the same way: `redactSnapshot` (`src/discovery/redact.ts`)
+applies the identical label/value asymmetry `formatObservation` already uses
+to a whole snapshot rather than one rendered line, and `replay.ts` redacts a
+resolved action's value before tracing it whenever the `ValueSource` it came
+from points at a `sensitive` parameter. Four tests
+(`test/replay/replay.test.ts`, "redaction inside replay") prove the real
+secret still reaches the surface while neither trace file nor failure
+evidence ever contains it.
+
+**Two boundaries worth naming rather than leaving implicit.** First, this
+redaction path is for *input* text — what a decision typed in. What a
+capability *extracts* as an output is deliberately never redacted: a "read
+the member's balance" capability exists specifically to relay that value to
+whoever called it, and redacting the one thing the caller asked for would
+make the automation useless while adding no real protection (the caller
+already knows what field they asked to read). The asymmetry is intentional,
+not an oversight the input-side fix forgot to apply symmetrically. Second,
+`planner.jsonl` (the recorded cassette, `src/discovery/cassette.ts`) captures
+the model's raw decision unredacted, by design — a cassette exists to
+reproduce an exact exchange at zero cost, and a redacted cassette could not
+replay the same decision back. If a model ever generated a real secret as
+part of a fill decision, cassette recording would capture it even though
+`summary.json` and the compiled artifact would not, since those are written
+from the (now-redacted) resolved action, not from the raw decision. No run in
+this repository has ever exercised that path for real data - the login
+screen accepts and stores nothing - but it is a real, narrower gap than the
+one this phase closed, named here rather than left for a reader to discover.
 
 ## 7. Cuts
 
