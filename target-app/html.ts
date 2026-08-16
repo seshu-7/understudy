@@ -46,8 +46,10 @@ ${body}
 }
 
 /** The standard content-frame page: a title bar, then the body, then the
- *  status strip every screen in this product carries. */
-export function screen(title: string, body: string, opts: { crumb?: string } = {}): string {
+ *  status strip every screen in this product carries. `productLabel`
+ *  defaults to the original single-tenant text so every existing caller is
+ *  unaffected; a tenant-branded server passes its own. */
+export function screen(title: string, body: string, opts: { crumb?: string; productLabel?: string } = {}): string {
   return bare(
     title,
     `<TABLE WIDTH="100%" BORDER="0" CELLPADDING="0" CELLSPACING="0">
@@ -56,7 +58,7 @@ export function screen(title: string, body: string, opts: { crumb?: string } = {
       <TABLE WIDTH="100%" BORDER="0" CELLPADDING="3" CELLSPACING="0">
         <TR>
           <TD><FONT FACE="Verdana, Arial" SIZE="2" COLOR="#FFFFFF"><B>${esc(title)}</B></FONT></TD>
-          <TD ALIGN="RIGHT"><FONT FACE="Verdana, Arial" SIZE="1" COLOR="#CCDDEE">CoreVantage Servicing 7.2</FONT></TD>
+          <TD ALIGN="RIGHT"><FONT FACE="Verdana, Arial" SIZE="1" COLOR="#CCDDEE">${esc(opts.productLabel ?? "CoreVantage Servicing 7.2")}</FONT></TD>
         </TR>
       </TABLE>
     </TD>

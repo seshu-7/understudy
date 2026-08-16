@@ -28,6 +28,7 @@ import {
   subAccountFormPage,
   subAccountShellPage,
 } from "./pages.js";
+import { MERIDIAN, type TenantBranding } from "./tenants.js";
 
 const PORT = Number(process.env["TARGET_APP_PORT"] ?? 4501);
 const SESSION_COOKIE = "CVSESS";
@@ -152,15 +153,15 @@ function handleControl(url: URL, res: ServerResponse): void {
   }
 }
 
-function handleMember(url: URL, res: ServerResponse): void {
+function handleMember(url: URL, res: ServerResponse, tenant: TenantBranding): void {
   const fn = url.searchParams.get("fn") ?? "srch";
-  if (fn === "srch") return html(res, searchPage());
+  if (fn === "srch") return html(res, searchPage({ tenant }));
 
   const raw = url.searchParams.get("mbr") ?? "";
   const result = lookupMember(raw);
   switch (result.kind) {
     case "ok":
-      return html(res, memberDetailPage(result.member));
+      return html(res, memberDetailPage(result.member, tenant));
     // Everything below re-renders the search screen carrying a message. That
     // is what this product does, and it matters for the replay contract: the
     // automation lands on a page that looks like where it started, so "did I
@@ -168,7 +169,7 @@ function handleMember(url: URL, res: ServerResponse): void {
     case "invalid_id":
     case "not_found":
     case "restricted":
-      return html(res, searchPage({ error: result.message, value: raw }));
+      return html(res, searchPage({ error: result.message, value: raw, tenant }));
   }
 }
 
@@ -213,7 +214,7 @@ async function handleAccount(req: IncomingMessage, url: URL, res: ServerResponse
   return html(res, fn === "form" ? subAccountFormPage(member) : subAccountShellPage(member));
 }
 
-async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+async function route(req: IncomingMessage, res: ServerResponse, url: URL, tenant: TenantBranding): Promise<void> {
   const path = url.pathname;
 
   if (path.startsWith("/__control/")) return handleControl(url, res);
@@ -222,11 +223,11 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
     return signedOn(req) ? html(res, framesetDoc()) : redirect(res, "/servicing/login.asp");
   }
 
-  if (path === "/servicing/login.asp") return html(res, loginPage());
+  if (path === "/servicing/login.asp") return html(res, loginPage(undefined, tenant));
 
   if (path === "/servicing/logon.asp" && req.method === "POST") {
     const form = await readForm(req);
-    if (!(form["uid"] ?? "").trim()) return html(res, loginPage("Operator ID is required."));
+    if (!(form["uid"] ?? "").trim()) return html(res, loginPage("Operator ID is required.", tenant));
     const sid = randomUUID();
     sessions.add(sid);
     res.writeHead(302, {
@@ -240,7 +241,7 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
   if (path === "/servicing/logoff.asp") {
     const sid = cookies(req)[SESSION_COOKIE];
     if (sid) sessions.delete(sid);
-    return html(res, loginPage("You have been signed off."), 200, {
+    return html(res, loginPage("You have been signed off.", tenant), 200, {
       "Set-Cookie": `${SESSION_COOKIE}=; Path=/; Max-Age=0`,
     });
   }
@@ -250,18 +251,22 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
   if (await applyFault(req, res, url)) return;
 
   if (path === "/servicing/nav.asp") return html(res, navPage());
-  if (path === "/servicing/mbr.asp") return handleMember(url, res);
+  if (path === "/servicing/mbr.asp") return handleMember(url, res, tenant);
   if (path === "/servicing/acct.asp") return handleAccount(req, url, res);
 
   return html(res, notFoundPage(), 404);
 }
 
 /** Built without listening so tests can bind an ephemeral port and run the
- *  real application rather than a stand-in for it. */
-export function createServicingServer(): Server {
+ *  real application rather than a stand-in for it. `tenant` defaults to the
+ *  original single-tenant branding, so every existing caller sees identical
+ *  behaviour; passing NORTHSTAR (or any other TenantBranding) is what makes
+ *  this the *same* server code, not a second copy, running as a second
+ *  institution. */
+export function createServicingServer(tenant: TenantBranding = MERIDIAN): Server {
   return createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "127.0.0.1"}`);
-    route(req, res, url).catch((err: unknown) => {
+    route(req, res, url, tenant).catch((err: unknown) => {
       process.stderr.write(`[target-app] ${String(err)}\n`);
       if (!res.headersSent) html(res, serverErrorPage(), 500);
     });

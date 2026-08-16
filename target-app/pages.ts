@@ -1,5 +1,6 @@
 import { MINIMUM_DEPOSIT, SUB_ACCOUNT_KINDS, type Member } from "./data.js";
 import { bare, esc, hidden, message, money, row, screen, selectInput, submit, textInput } from "./html.js";
+import { MERIDIAN, type TenantBranding } from "./tenants.js";
 
 /**
  * The screens.
@@ -23,7 +24,7 @@ import { bare, esc, hidden, message, money, row, screen, selectInput, submit, te
 
 const PRODUCT = "CoreVantage Servicing";
 
-export function loginPage(error?: string): string {
+export function loginPage(error?: string, tenant: TenantBranding = MERIDIAN): string {
   return screen(
     "Sign On",
     `${error ? message("error", error) : ""}
@@ -38,6 +39,7 @@ ${row("Password", `<INPUT TYPE="PASSWORD" NAME="pwd" SIZE="16">`)}
 <FONT FACE="Verdana, Arial" SIZE="1" COLOR="#666666">
 Demonstration system. Any operator id and password are accepted; no credential is stored or checked.
 </FONT>`,
+    { productLabel: tenant.productLabel },
   );
 }
 
@@ -70,7 +72,8 @@ ${item("Sign Off", "/servicing/logoff.asp")}
   );
 }
 
-export function searchPage(opts: { error?: string; value?: string } = {}): string {
+export function searchPage(opts: { error?: string; value?: string; tenant?: TenantBranding } = {}): string {
+  const tenant = opts.tenant ?? MERIDIAN;
   return screen(
     "Member Search",
     `${opts.error ? message("error", opts.error) : ""}
@@ -78,14 +81,14 @@ export function searchPage(opts: { error?: string; value?: string } = {}): strin
 ${hidden("fn", "det")}
 <TABLE BORDER="0" CELLPADDING="3" CELLSPACING="0">
 ${row("Member Number", textInput("mbr", opts.value ?? "", 12, 6), "(6 digits)")}
-  <TR><TD></TD><TD><BR>${submit("Search")}</TD></TR>
+  <TR><TD></TD><TD><BR>${submit(tenant.searchButtonLabel)}</TD></TR>
 </TABLE>
 </FORM>`,
-    { crumb: "Servicing &gt; Member Search" },
+    { crumb: "Servicing &gt; Member Search", productLabel: tenant.productLabel },
   );
 }
 
-export function memberDetailPage(member: Member): string {
+export function memberDetailPage(member: Member, tenant: TenantBranding = MERIDIAN): string {
   const rows = member.accounts
     .map(
       (a) => `  <TR>
@@ -121,7 +124,7 @@ ${rows || `  <TR><TD BGCOLOR="#FFFFFF" COLSPAN="4"><FONT FACE="Verdana, Arial" S
 &nbsp;|&nbsp;
 <A HREF="/servicing/mbr.asp?fn=srch">New Search</A>
 </FONT>`,
-    { crumb: `Servicing &gt; Member Search &gt; ${esc(member.id)}` },
+    { crumb: `Servicing &gt; Member Search &gt; ${esc(member.id)}`, productLabel: tenant.productLabel },
   );
 }
 
