@@ -26,6 +26,7 @@ model in the loop at all, which is the system's actual production path.
 | [`replay-1786838072086/`](./replay-1786838072086/) | **An honest failure, not a crash.** `member_number=100599` reaches a real permission-denial screen ("Access to member 100599 is restricted. Contact Compliance...") that this capability has no declared outcome for — nobody has reviewed the draft artifact and added one yet. Replay reports `CHECKPOINT_FAILED` at step 4 rather than silently succeeding or throwing; `failure/` holds the screenshot and node snapshot from the moment it gave up. This is the gap a human reviewer closes by adding a `hard_failure` outcome to the artifact, not something replay should paper over on its own. |
 | [`replay-1786838157645/`](./replay-1786838157645/), [`replay-1786838165392/`](./replay-1786838165392/) | Two more runs of `member_number=100234`, same as the first — see `determinism-1786838165392/` below. |
 | [`determinism-1786838165392/`](./determinism-1786838165392/) | **The determinism claim, checked, not just asserted.** The three `100234` runs above, diffed against each other with only run-specific metadata (runId, timestamps, evidence path) excluded. Identical. |
+| [`replay-1786846579516/`](./replay-1786846579516/) | **Cross-tenant reuse, against a real second tenant.** `artifacts/corevantage_servicing.member_savings_balance.northstar.v1.json` (produced by `npm run overlay`, "Search" rewritten to "Find Member") replayed against an independently-launched `TARGET_APP_TENANT=northstar` server on its own port, with its own policy (`config/policy.northstar.json`) — not the in-process test server every other row here uses. Reaches the identical `savings_balance: "4,182.55"` the original meridian recording does. REPORT.md §4 has the full write-up, including what happens to the *un*-overlaid capability against this same tenant (checked in `test/artifact/overlay-web.test.ts`, not captured as a directory here — see that test's own header for why). |
 
 Each discovery run is a directory named `discovery-<runId>/`:
 
@@ -52,7 +53,8 @@ replay-<runId>/
 | `determinism-*` | The same capability replayed N times, results diffed | done |
 | `replay-business-outcome-*` | A declared business outcome (e.g. "no such member") returned as an answer, not an error | pending a reviewer declaring one on the artifact — see the `replay-1786838072086` row above |
 | escalate + resume | A run that stopped, handed control to a human, and resumed | done — proven live, not from a directory (see below) |
-| `cross-model-*` | The same goal discovered by two different models, compiled artifacts compared | pending Phase 8 |
+| cross-tenant reuse | The same capability, overlaid and replayed against a second real tenant with no re-recording | done — `replay-1786846579516/` above |
+| `cross-model-*` | The same goal discovered by two different models, compiled artifacts compared | cut — REPORT.md §7 caps this project at two stretch goals; cross-tenant reuse and the capability catalog were the two chosen |
 
 **Escalation and handoff, why this one isn't a static directory.** Every
 other row here is a `npm run discover`/`npm run compile`/`npm run replay`

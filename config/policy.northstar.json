@@ -1,0 +1,45 @@
+{
+  "$comment": "Northstar Credit Union's own policy instance - same shape as policy.example.json, different allowlist. A real multi-tenant deployment configures policy per tenant, same as it configures branding per tenant; this is that, not a workaround.",
+
+  "allowlist": {
+    "origins": ["http://127.0.0.1:4502", "http://localhost:4502"],
+    "routes": [
+      "/servicing/**",
+      "/members/**",
+      "/accounts/**",
+      "/login"
+    ],
+    "denyRoutes": [
+      "/admin/**",
+      "/servicing/**/delete",
+      "/servicing/**/close"
+    ],
+    "actions": ["click", "fill", "select", "press", "navigate", "wait"]
+  },
+
+  "risk": {
+    "default": "safe",
+    "rules": [
+      { "match": { "route": "/**/confirm" }, "tier": "elevated" },
+      { "match": { "nameMatches": "\\b(post|submit|transfer|disburse)\\b" }, "tier": "elevated" },
+      { "match": { "nameMatches": "\\b(delete|close account|void|reverse)\\b" }, "tier": "irreversible" }
+    ]
+  },
+
+  "unattended": {
+    "requiresApproval": "approved",
+    "maxTier": "elevated",
+    "onIrreversible": "escalate"
+  },
+
+  "redaction": {
+    "patterns": [
+      { "name": "ssn", "regex": "\\b\\d{3}-\\d{2}-\\d{4}\\b" },
+      { "name": "card", "regex": "\\b(?:\\d[ -]?){13,19}\\b" },
+      { "name": "email", "regex": "[\\w.+-]+@[\\w-]+\\.[\\w.]+" },
+      { "name": "bearer", "regex": "\\b(bearer\\s+|sk-|ghp_|AIza)[A-Za-z0-9._-]{16,}" }
+    ],
+    "fieldNames": ["password", "pin", "ssn", "taxId", "cardNumber", "securityCode"],
+    "placeholder": "[redacted:{name}]"
+  }
+}

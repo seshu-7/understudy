@@ -1,6 +1,6 @@
 # Design write-up
 
-> **In progress — Phase 7 of 9.** Sections fill in as the decisions get made
+> **In progress — Phase 8 of 9.** Sections fill in as the decisions get made
 > and tested, not at the end from memory. Anything not yet built says so
 > plainly rather than describing an intention in the present tense.
 
@@ -212,12 +212,73 @@ run identifies concretely rather than a gap papered over in the write-up.
 
 ## 4. Heterogeneity & multi-tenant
 
-_Pending Phase 8 and the write-up._ Direction: the seam between "how we
-perceive and act on a surface" and "the recorded flow" is the `Surface`
-interface plus the normalised node vocabulary. `TargetBinding` separates `app`
-(the vendor product) from `tenant` (one institution's instance), which is what
-lets a single artifact be reused across tenants running the same software with
-a per-tenant overlay applied on top, rather than re-recorded per tenant.
+The seam between "how we perceive and act on a surface" and "the recorded
+flow" is the `Surface` interface plus the normalised node vocabulary.
+`TargetBinding` has separated `app` (the vendor product) from `tenant` (one
+institution's instance) since Phase 4, on the claim that a capability
+recorded against one tenant should be reusable against another running the
+same software rather than re-recorded per institution. This phase is that
+claim, checked against a second real tenant rather than left as an
+architectural note.
+
+**A second, real tenant, not a mock.** `target-app/tenants.ts` adds
+`TenantBranding` and a second preset (`NORTHSTAR`) to the exact same server
+code every other test in this repo runs - `createServicingServer(tenant)`
+threads it through the screens that carry branding, defaulting to the
+original single-tenant text so nothing else changes. Northstar renames the
+member-search button from "Search" to "Find Member" - the precise example
+`src/surface/text.ts`'s own header has used throughout this project as the
+canonical case a locator strategy has to survive.
+
+**The overlay is text substitution only, deliberately.** `src/artifact/
+overlay.ts`'s `applyOverlay` rewrites every `name`/`label` a step, checkpoint,
+output or outcome detector targets, plus the target binding's tenant and
+entry point - nothing else. An overlay that could add or remove steps would
+be a second compiler with none of the first one's evidence discipline
+(refusing to guess, grounding every output); rewriting a `TextMatch` literal
+only asserts "this tenant calls the same control something else," and if
+that turns out to be false the overlaid capability's own checkpoints fail
+loudly at replay time exactly the way any other wrong descriptor would.
+`contentHash` is recomputed (moved to `src/artifact/hash.ts` so the compiler
+and the overlay share one implementation rather than two that could drift)
+and `approval` always resets to `draft`, regardless of the source
+capability's approval state - nobody has reviewed *these* descriptors yet.
+
+**What the matcher's own robustness turned out not to cover, checked for
+real, not assumed.** The working theory going in was that structural
+evidence (containment, ordinal) would let the raw, un-overlaid recording
+degrade gracefully against the rename - "weaker match, still works."
+`test/artifact/overlay-web.test.ts` replays the real committed artifact
+against a real, independently-launched northstar server
+(`npm run target-app` with `TARGET_APP_TENANT=northstar`, evidenced in
+`evidence/replay-1786846579516/`) and the actual result is more interesting
+than that: the raw recording fails outright, and one step *before* the
+renamed button, not at it. Step 3's checkpoint is "step 4's own target is
+present" (Phase 4's checkpoint-inference rule), and step 4's target is the
+button that no longer carries the text it was recorded against - so replay
+never even gets to *attempt* step 4; it stops at step 3's `CHECKPOINT_FAILED`
+first. For this rename, an overlay is not a robustness nicety, it is the
+difference between the capability working on a second tenant at all and not.
+The overlaid capability (`applyOverlay` with `{"Search": "Find Member"}`,
+committed as `artifacts/corevantage_servicing.member_savings_balance
+.northstar.v1.json`) replays clean end-to-end and reaches the identical
+`savings_balance: "4,182.55"` the original meridian recording does - real
+evidence in `evidence/replay-1786846579516/`, a real second policy instance
+in `config/policy.northstar.json` (a real deployment configures policy per
+tenant same as it configures branding per tenant), from a JSON file with one
+button's name literally rewritten and nothing else.
+
+**The capability catalog.** README.md's original layout sketch named
+`src/catalog/` as "the agent-facing capability surface," and that is what it
+is: `loadCatalog` reads and Zod-validates every artifact in a directory,
+`toToolDefinition` projects a `Capability`'s already-typed `inputs`/`outputs`
+into the JSON-Schema-shaped tool definition an LLM agent's own tool-use
+surface would need, and `invokeCapability` looks a capability up by id and
+dispatches straight to `replayCapability` - deliberately with no policy or
+approval logic of its own to duplicate and let drift out of sync with the
+real interpreter's, the same failure mode already found and fixed twice in
+Phase 6 (REPORT.md §6). `npm run catalog -- --tools` prints exactly what an
+agent integration would see.
 
 ## 5. Escalation & handoff
 
