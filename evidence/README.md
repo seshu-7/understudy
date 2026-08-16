@@ -51,8 +51,24 @@ replay-<runId>/
 | `replay-*` (failure) | A real, undeclared condition detected and reported with step, expected and observed — not a crash | done |
 | `determinism-*` | The same capability replayed N times, results diffed | done |
 | `replay-business-outcome-*` | A declared business outcome (e.g. "no such member") returned as an answer, not an error | pending a reviewer declaring one on the artifact — see the `replay-1786838072086` row above |
-| `replay-escalated-*` | A run that stopped, handed control to a human, and resumed | pending Phase 7 |
+| escalate + resume | A run that stopped, handed control to a human, and resumed | done — proven live, not from a directory (see below) |
 | `cross-model-*` | The same goal discovered by two different models, compiled artifacts compared | pending Phase 8 |
+
+**Escalation and handoff, why this one isn't a static directory.** Every
+other row here is a `npm run discover`/`npm run compile`/`npm run replay`
+invocation captured once and committed. A genuine handoff needs a human to
+actually act mid-run, which an agent generating this repository cannot
+produce as a one-off recording without faking the human's half. The honest
+substitute — used instead of a fabricated `replay-escalated-*/` — is
+[`test/replay/resume-web.test.ts`](../test/replay/resume-web.test.ts): a real
+`WebSurface`, the real committed artifact, run against a policy that marks
+"Sign On" irreversible (which happens twice in the real flow), with a
+stand-in for the human's own action calling `surface.act()` directly against
+the exact browser instance replay itself escalated with. It resumes correctly
+across both handoffs and reaches the identical `savings_balance: "4,182.55"`
+the fully-automated run does — re-run it any time with `npm test` rather than
+trusting a snapshot of one run that happened once. REPORT.md §5 has the full
+write-up, including what this does and does not prove.
 
 Sensitive values are redacted at the perception boundary, before anything
 reaches this directory. A test asserts that nothing secret-shaped is present.

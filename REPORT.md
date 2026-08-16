@@ -1,6 +1,6 @@
 # Design write-up
 
-> **In progress — Phase 6 of 9.** Sections fill in as the decisions get made
+> **In progress — Phase 7 of 9.** Sections fill in as the decisions get made
 > and tested, not at the end from memory. Anything not yet built says so
 > plainly rather than describing an intention in the present tense.
 
@@ -221,13 +221,69 @@ a per-tenant overlay applied on top, rather than re-recorded per tenant.
 
 ## 5. Escalation & handoff
 
-_Pending Phase 7._ Direction: a `SessionLease` with an owner
-(`automation | human`) and a monotonic control token. Escalation releases the
-lease and raises an intervention carrying the capability, the step, the
-observed state and why it stopped. The human drives the **same** live session,
-not a fresh one; their actions are captured into the same trace tagged as
-human-authored; resume re-verifies the next step's precondition before
-continuing rather than blindly picking up where it left off.
+The direction sketched here in earlier phases is built: `src/replay/lease.ts`
+(`SessionLease`, owner `automation | human`, a monotonic token that only
+increments on a real ownership change), `src/replay/intervention.ts` (the
+persisted record a handoff raises), and `resumeCapability` in
+`src/replay/replay.ts`, which is what actually made `ReplayEscalated`'s
+`resumable` field able to be `true` - Phase 5 shipped it hardcoded `false`
+with a comment saying this phase would fix that.
+
+**The two escalation reasons need different resume semantics, not one.** A
+`reauthenticate` remedy escalates because a *condition* is blocking the run -
+the same step is still waiting to happen, so resume retries it, and the
+precondition is that remedy's own detector now reading `cleared` rather than
+present. An irreversible step blocked in unattended mode escalates for the
+opposite reason: nothing is wrong, automation is simply refused that one
+action, and a human is expected to perform *that exact step* themselves. Resume
+there continues at the *next* step - retrying it would mean automation
+attempting the irreversible action anyway, the precise thing the block exists
+to prevent - and the precondition is the blocked step's own checkpoint (its
+ordinary proof of having happened, same evidence replay would have checked if
+it had been allowed to act). `Intervention.resumeAt` and `.precondition`
+encode this per escalation rather than leaving `resumeCapability` to guess
+which case it is in.
+
+**Resume never takes a human's word for it.** Before continuing anything,
+`resumeCapability` re-observes the live surface and checks the intervention's
+precondition fresh - a human saying "I'm done" is not itself evidence the
+blocking condition actually cleared, and proceeding on that alone would be
+exactly the kind of guess this project's matcher and checkpoints already
+refuse to make everywhere else. `test/replay/replay.test.ts` ("refuses to
+continue when the precondition still does not hold") proves this returns a
+real failure rather than silently pressing on.
+
+**Real evidence, not just a scripted fake.** No genuine human was available
+to this test, so the most honest stand-in is `surface.act()` called directly
+against the exact `WebSurface` instance replay itself escalated with - the
+same call a human's own click produces through the same interface, never a
+freshly launched browser. `test/replay/resume-web.test.ts` runs the real
+committed artifact against the real target app with "Sign On" marked
+irreversible for the test, which happens twice in the real 5-step flow (once
+to leave the login screen, once to confirm the operator ID) - so this is two
+genuine handoffs against one continuously-open session, not one. Both resume
+correctly and the run reaches the identical answer
+(`savings_balance: "4,182.55"`) the fully-automated replay does.
+`src/cli/replay.ts` wires the same mechanism to an actual terminal: on a
+resumable escalation it leaves the browser open, pauses on stdin instead of
+exiting, and calls `resumeCapability` once a human presses Enter - this path
+is real code, not a stub, but wasn't itself exercisable by an agent with no
+terminal human to press the key, which is exactly why the automated
+browser-driven test above exists as the checked evidence instead.
+
+**One boundary from the original sketch not fully built.** "Their actions are
+captured into the same trace tagged as human-authored" is only partly true:
+the handoff itself is a real `trace.jsonl` event (`kind: "handoff"`, both
+directions), and everything automation does *after* resuming is traced
+exactly as it always is. What a human does *during* the handoff - which
+buttons, in what order, whether they took a different path than the recorded
+one - is not captured at all, because nothing is watching the page while
+`resumeCapability` waits; only the state resume observes when it re-checks
+the precondition is. Recording a human's own interactions live would mean
+instrumenting the page itself (a DOM listener or Playwright's own input
+tracing) rather than the interpreter loop, which is a materially bigger
+feature than this phase's scope, and is named here rather than left for a
+reader to assume already works.
 
 ## 6. Safety
 
