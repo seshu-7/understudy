@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-
+import { contentHashOf } from "./hash.js";
 import { CapabilitySchema, type Capability, type OutputSpec, type ParamSpec, type Step, type ValueSource } from "./schema.js";
 import type { DiscoveredStep, DiscoveryOutcome } from "../discovery/types.js";
 import type { SemanticDescriptor, TextMatch } from "../surface/types.js";
@@ -276,24 +275,6 @@ function placeholderText(goalText: string, acc: ParamAccumulator): string {
   let out = goalText;
   for (const [value, name] of entries) out = out.split(value).join(`{${name}}`);
   return out;
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-/** Hashes only the semantic content - never provenance or approval, both of
- *  which describe how the artifact came to exist rather than what it does.
- *  Two capabilities recorded independently that compile to the same program
- *  get the same hash; that equality is what makes Phase 8's cross-model
- *  convergence check mean something instead of an eyeball comparison. */
-function contentHashOf(semantic: Pick<Capability, "target" | "inputs" | "outputs" | "steps" | "outcomes">): string {
-  return createHash("sha256").update(stableStringify(semantic)).digest("hex").slice(0, 16);
 }
 
 export function compileCapability(outcome: DiscoveryOutcome, options: CompileOptions = {}): Capability {
