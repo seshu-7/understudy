@@ -63,9 +63,47 @@ export type PolicyDecision =
   | { allowed: true; tier: RiskTier }
   | { allowed: false; tier: RiskTier; reason: string };
 
-function pathnameOf(location: string): string {
+const TIER_ORDER: Record<RiskTier, number> = { safe: 0, elevated: 1, irreversible: 2 };
+
+export type TierGate = { allowed: true } | { allowed: false; escalate: boolean; reason: string };
+
+/**
+ * Whether an action of this risk tier may proceed with no human confirming
+ * it in the moment - shared by replay (`attended: false`) and discovery,
+ * which has no per-step confirmation mechanism at all and is therefore at
+ * least as "unattended" as replay ever is. `escalate` is meaningful only to
+ * a caller that has somewhere to escalate *to* (replay's intervention
+ * handoff); discovery has no such mechanism, so it treats every disallowed
+ * tier as a hard stop regardless of `escalate`.
+ */
+export function unattendedGate(tier: RiskTier, policy: Policy): TierGate {
+  if (tier === "irreversible") {
+    return {
+      allowed: false,
+      escalate: policy.unattended.onIrreversible === "escalate",
+      reason: "irreversible actions never run unattended, regardless of approval state",
+    };
+  }
+  if (TIER_ORDER[tier] > TIER_ORDER[policy.unattended.maxTier]) {
+    return { allowed: false, escalate: false, reason: `risk tier "${tier}" exceeds the unattended ceiling "${policy.unattended.maxTier}"` };
+  }
+  return { allowed: true };
+}
+
+/** Pathname *and* query string. A policy author who needs to block a
+ *  specific query-string-routed action (`?fn=delete`, the norm for the
+ *  legacy .asp-style back-office app this project is built to automate,
+ *  which already routes its own real navigation this way - see
+ *  target-app/server.ts's `?fn=srch`/`?fn=new`/`?fn=form`) needs the route
+ *  string handed to `matchesAny` to actually contain it. Dropping the query
+ *  string here meant `denyRoutes`/`routes` could never match anything
+ *  encoded that way, no matter how the glob pattern was written - `**`
+ *  still matches across it once it's included, so existing route patterns
+ *  are unaffected. */
+function routeOf(location: string): string {
   try {
-    return new URL(location).pathname;
+    const url = new URL(location);
+    return url.pathname + url.search;
   } catch {
     return location;
   }
@@ -125,7 +163,7 @@ export function checkAction(
 
   const target = action.kind === "navigate" ? action.to : location;
   const origin = originOf(target);
-  const route = pathnameOf(target);
+  const route = routeOf(target);
 
   if (!matchesAny(origin, policy.allowlist.origins)) {
     return { allowed: false, tier: "irreversible", reason: `origin "${origin}" is not in the allowlist` };

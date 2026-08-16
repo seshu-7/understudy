@@ -105,8 +105,12 @@ nobody edits one without the other next month).
 A capability is a **contract an agent calls**, so it carries typed inputs,
 typed outputs and a declared set of outcomes — not merely an ordered step
 list. It is also a **build output**, which is why provenance records the
-discovery run id, planner and how many exploratory steps the compiler pruned,
-but never enough to reconstruct the model conversation.
+discovery run id and planner, but never enough to reconstruct the model
+conversation. `prunedSteps` sits alongside them for the same reason — a
+compiler that later learns to drop exploratory steps of its own would have
+somewhere to report the count — but today's compiler has no pruning logic
+at all; every step that reaches it already survived discovery-time
+resolution and policy, so the field is always `0`, not a live count.
 
 The locator design is the part worth arguing. A selector is a single
 hypothesis that either hits or misses. A `SemanticDescriptor` is instead a
@@ -400,6 +404,13 @@ attended/unattended gating is written up in §3).
 Two decisions worth stating early. Policy is enforced on every action in
 **both** discovery and replay — a model exploring a back-office application is
 not a trusted context, and is exactly where an unbounded action does damage.
+That includes risk tiers, not just the allowlist: `runDiscovery` calls the
+same `unattendedGate` replay's unattended mode does before any action
+executes, since discovery has no per-step human confirmation either. The one
+asymmetry is what happens on a disallowed tier - replay can escalate to a real
+handoff (§5) because a live session and a resumable intervention exist to
+escalate *to*; discovery has neither, so it always treats a disallowed tier
+as a hard stop (`policy_blocked`) rather than pausing for a human mid-run.
 And redaction happens at the **perception boundary**, before an observation
 reaches the planner, the trace, an artifact or a log; redacting at write time
 is too late, because by then the value has already been sent to the model.

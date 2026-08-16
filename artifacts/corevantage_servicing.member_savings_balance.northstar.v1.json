@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "id": "corevantage_servicing.member_savings_balance",
+  "id": "corevantage_servicing.member_savings_balance.northstar",
   "name": "Look up a member's savings balance",
   "description": "look up member {member_number} and read their current savings balance",
   "version": 1,

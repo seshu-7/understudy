@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -26,11 +26,62 @@ import { nodeRef, type Action, type CapturedEvidence, type Surface, type UINode,
 const ARTIFACTS_DIR = join(process.cwd(), "artifacts");
 const REAL_ID = "corevantage_servicing.member_savings_balance";
 
+/** A minimal, schema-valid capability, written as a plain JSON string so a
+ *  test can drop it straight into a scratch directory the way a real
+ *  artifact file sits in `artifacts/`. */
+function minimalCapabilityJson(id: string): string {
+  const searchButton = { role: "button", name: { kind: "normalized", value: "Search" } };
+  const balanceText = { role: "text" };
+  return JSON.stringify({
+    schemaVersion: "1.0",
+    id,
+    name: "Look up a member",
+    description: "look up a member",
+    version: 1,
+    contentHash: "0123456789abcdef",
+    approval: "draft",
+    target: { app: "app", tenant: "t", surface: "web", entryPoint: "http://127.0.0.1:4501/servicing/login.asp" },
+    inputs: [],
+    outputs: [],
+    steps: [
+      { index: 0, intent: "click Search", action: { kind: "click", target: searchButton }, checkpoint: { kind: "node_present", descriptor: balanceText }, risk: "safe", timeoutMs: 10_000 },
+    ],
+    outcomes: [],
+    provenance: { discoveryRunId: "r", recordedAt: "2026-08-15T00:00:00.000Z", planner: { provider: "ollama", model: "m" }, prunedSteps: 0, humanEdited: false },
+  });
+}
+
 describe("loadCatalog", () => {
   it("loads and validates the real committed artifact, ignoring README.md", async () => {
     const catalog = await loadCatalog(ARTIFACTS_DIR);
     expect(catalog.length).toBeGreaterThanOrEqual(1);
     expect(catalog.some((c) => c.id === REAL_ID)).toBe(true);
+  });
+
+  describe("against a scratch directory", () => {
+    let dir: string;
+    beforeEach(async () => {
+      dir = await mkdtemp(join(tmpdir(), "understudy-catalog-scratch-"));
+    });
+    afterEach(async () => {
+      await rm(dir, { recursive: true, force: true });
+    });
+
+    it("throws, naming both files, when two artifacts share one id - a catalog keyed on id cannot silently pick one", async () => {
+      await writeFile(join(dir, "a.json"), minimalCapabilityJson("dup.capability"), "utf8");
+      await writeFile(join(dir, "b.json"), minimalCapabilityJson("dup.capability"), "utf8");
+      await expect(loadCatalog(dir)).rejects.toThrow(/duplicate capability id "dup\.capability".*"a\.json".*"b\.json"|duplicate capability id "dup\.capability".*"b\.json".*"a\.json"/s);
+    });
+
+    it("names the offending file when JSON syntax is invalid, not just the parse position", async () => {
+      await writeFile(join(dir, "broken.json"), "{ not valid json", "utf8");
+      await expect(loadCatalog(dir)).rejects.toThrow(/broken\.json/);
+    });
+
+    it("names the offending file when JSON is well-formed but fails the capability schema", async () => {
+      await writeFile(join(dir, "incomplete.json"), JSON.stringify({ schemaVersion: "1.0", id: "bad.capability" }), "utf8");
+      await expect(loadCatalog(dir)).rejects.toThrow(/incomplete\.json/);
+    });
   });
 });
 

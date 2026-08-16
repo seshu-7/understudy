@@ -190,6 +190,11 @@ export const ProvenanceSchema = z.object({
   discoveryRunId: z.string().min(1),
   recordedAt: z.iso.datetime({ offset: true }).or(z.iso.datetime()),
   planner: z.object({ provider: z.string().min(1), model: z.string().min(1) }),
+  /** Reserved for a compiler that later learns to drop exploratory steps of
+   *  its own - see compile.ts's own note at the call site. Every step that
+   *  reaches the compiler today already survived discovery-time resolution
+   *  and policy, so nothing is pruned yet and this is always 0, not a live
+   *  count of anything that happened. */
   prunedSteps: z.number().int().nonnegative(),
   humanEdited: z.boolean(),
 });

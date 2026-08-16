@@ -109,12 +109,13 @@ describe("cross-tenant reuse against a real second tenant", () => {
     "the overlaid capability replays correctly end-to-end, reaching the identical answer",
     async () => {
       const capability = await loadRealCapability();
-      const overlaid = applyOverlay(capability, {
+      const { capability: overlaid, unmatchedOverrides } = applyOverlay(capability, {
         tenant: NORTHSTAR.id,
         entryPoint: `${base}/servicing/login.asp`,
         textOverrides: { Search: NORTHSTAR.searchButtonLabel },
       });
       expect(overlaid.approval).toBe("draft");
+      expect(unmatchedOverrides).toEqual([]);
 
       const surface = await WebSurface.launch(overlaid.target.entryPoint);
       try {

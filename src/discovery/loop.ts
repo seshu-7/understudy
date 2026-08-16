@@ -1,9 +1,9 @@
 import { describeNode } from "../surface/describe.js";
 import { formatObservation } from "./observe-format.js";
-import { checkAction, type Policy } from "./policy.js";
+import { checkAction, unattendedGate, type Policy } from "./policy.js";
 import { CostCeilingExceededError, CostGovernor } from "./cost.js";
 import { groundOutputs, type OutputGrounding } from "./ground.js";
-import { fieldIsSensitiveByName, type RedactionPolicy } from "./redact.js";
+import { fieldIsSensitiveByName, redactText, type RedactionPolicy } from "./redact.js";
 import { TraceWriter } from "./trace.js";
 import type { Planner, PlannerDecision } from "./planner.js";
 import type { DiscoveredStep, DiscoveryGoal, DiscoveryOutcome, StopReason } from "./types.js";
@@ -109,12 +109,27 @@ function redactedPlaceholder(policy: RedactionPolicy): string {
   return policy.placeholder.replace("{name}", "field");
 }
 
+/** The model's own free-text `intent` narration routinely repeats the raw
+ *  value it just typed or selected (e.g. "Type the password X into the
+ *  Password field") - intent is natural-language prose, not a value with a
+ *  known shape, so a pattern rule alone can't be trusted to catch it. Strip
+ *  the exact raw value out first (the one thing known for certain to be the
+ *  secret), then run the normal pattern redaction over what's left in case
+ *  anything else slipped in. */
+function redactIntent(decision: PlannerDecision, policy: RedactionPolicy): string {
+  const placeholder = redactedPlaceholder(policy);
+  const rawValue = decision.text || decision.option;
+  const scrubbed = rawValue ? decision.intent.split(rawValue).join(placeholder) : decision.intent;
+  return redactText(scrubbed, policy);
+}
+
 function redactDecisionForTrace(decision: PlannerDecision, policy: RedactionPolicy): PlannerDecision {
   const placeholder = redactedPlaceholder(policy);
   return {
     ...decision,
     ...(decision.text !== undefined ? { text: placeholder } : {}),
     ...(decision.option !== undefined ? { option: placeholder } : {}),
+    intent: redactIntent(decision, policy),
   };
 }
 
@@ -233,6 +248,21 @@ export async function runDiscovery(goal: DiscoveryGoal, deps: RunDiscoveryDeps):
       break;
     }
 
+    // A model exploring live has no human confirming each individual click
+    // any more than an unattended replay run does - discovery gets the same
+    // risk-tier gate replay applies, not just the allowlist. There is
+    // nowhere in discovery to escalate to (no lease/intervention handoff
+    // exists until a capability is compiled), so a tier the policy would
+    // otherwise escalate is treated as a hard stop here instead.
+    const tierGate = unattendedGate(policyDecision.tier, policy);
+    if (!tierGate.allowed) {
+      const shot = await surface.capture();
+      await trace.screenshot(index, shot.bytes);
+      await trace.event("stop", index, { reason: "policy_blocked", detail: tierGate.reason });
+      stopReason = "policy_blocked";
+      break;
+    }
+
     try {
       // Always the real, unredacted action - the live surface has to receive
       // the actual value typed to work at all. Only what gets traced and
@@ -249,10 +279,11 @@ export async function runDiscovery(goal: DiscoveryGoal, deps: RunDiscoveryDeps):
     const shot = await surface.capture();
     await trace.screenshot(index, shot.bytes);
     const storedAction = sensitive ? redactActionForStorage(resolved.action, policy.redaction) : resolved.action;
-    await trace.event("action", index, { action: storedAction, intent: decision.intent });
+    const storedIntent = sensitive ? redactIntent(decision, policy.redaction) : decision.intent;
+    await trace.event("action", index, { action: storedAction, intent: storedIntent });
 
-    steps.push({ index, intent: decision.intent, action: storedAction, descriptor: resolved.descriptor, sensitive, confirmed: false });
-    historyLines.push(`${index}. ${decision.intent}`);
+    steps.push({ index, intent: storedIntent, action: storedAction, descriptor: resolved.descriptor, sensitive, confirmed: false });
+    historyLines.push(`${index}. ${storedIntent}`);
     previousSnapshot = snapshot;
   }
 

@@ -207,6 +207,38 @@ describe("checkpoint verification", () => {
   });
 });
 
+describe("surface failure", () => {
+  it("fails with SURFACE_ERROR when the action call throws - a detached frame, a dead session, a gone process", async () => {
+    const surface = new ScriptedSurface(() => snap([node({ role: "button", name: "Search" })]));
+    surface.act = async () => {
+      throw new Error("frame was detached");
+    };
+    const result = await replayCapability(makeCapability(), {}, { ...deps(makePolicy()), surface });
+    expect(result.status).toBe("failed");
+    if (result.status === "failed") {
+      expect(result.failure.code).toBe("SURFACE_ERROR");
+      expect(result.failure.message).toContain("frame was detached");
+    }
+  });
+});
+
+describe("step timeout", () => {
+  it("fails with STEP_TIMEOUT when the action call itself never returns, distinct from a checkpoint that never holds", async () => {
+    const surface = new ScriptedSurface(() => snap([node({ role: "button", name: "Search" })]));
+    // Never resolves and never rejects - the one shape CHECKPOINT_FAILED
+    // and SURFACE_ERROR cannot cover, since both require act() to have
+    // already returned (successfully or by throwing).
+    surface.act = () => new Promise<void>(() => {});
+    const capability = makeCapability({ steps: [makeStep({ timeoutMs: 20 })] });
+    const result = await replayCapability(capability, {}, { ...deps(makePolicy()), surface });
+    expect(result.status).toBe("failed");
+    if (result.status === "failed") {
+      expect(result.failure.code).toBe("STEP_TIMEOUT");
+      expect(result.failure.message).toContain("20ms");
+    }
+  });
+});
+
 describe("policy enforcement", () => {
   it("fails with POLICY_BLOCKED for a route outside the allowlist, attended or not", async () => {
     const before = snap([node({ role: "button", name: "Search" })], "http://127.0.0.1:9999/admin/danger");
@@ -562,6 +594,59 @@ describe("resuming after handoff", () => {
     phase = "search"; // "the human" logged back in; the search screen is up again
     const resumed = await resumeCapability(intervention, capability, {}, { ...deps(makePolicy()), surface });
     expect(resumed.status).toBe("success");
+  });
+
+  it("refuses a second resume against an already-consumed intervention, rather than silently re-executing its step", async () => {
+    const loginPrompt = descriptor({ role: "dialog", name: { kind: "normalized", value: "Session Expired" } });
+    const expired: OutcomeSpec = {
+      name: "session_expired",
+      class: "recoverable",
+      description: "the session timed out",
+      detect: { kind: "node_present", descriptor: loginPrompt },
+      remedy: { kind: "reauthenticate" },
+    };
+    let phase: "expired" | "search" = "expired";
+    // Unlike the test above, the Search button never leaves the screen once
+    // the human has logged back in - realistic, since a persistent
+    // toolbar/nav control staying visible across a state change is exactly
+    // how this project's own target app behaves. Nothing here ever
+    // transitions the screen away from "search", so a stale second resume
+    // has no incidental self-protection to rely on - only the guard itself
+    // is what stops it.
+    const surface = new ScriptedSurface(() =>
+      phase === "expired"
+        ? snap([node({ role: "dialog", name: "Session Expired" })])
+        : snap([node({ role: "button", name: "Search" }), node({ role: "text", name: "Result" })]),
+    );
+
+    const capability = makeCapability({ outcomes: [expired] });
+    const stopped = await replayCapability(capability, {}, { ...deps(makePolicy()), surface });
+    expect(stopped.status).toBe("escalated");
+    if (stopped.status !== "escalated") return;
+
+    const intervention = await readIntervention(runDir);
+    phase = "search"; // "the human" logged back in
+
+    const firstResume = await resumeCapability(intervention, capability, {}, { ...deps(makePolicy()), surface });
+    expect(firstResume.status).toBe("success");
+    expect(surface.acted).toHaveLength(1);
+
+    // A retry wrapper, a crash-and-restart from the persisted
+    // intervention.json, or a second concurrent caller could all pass this
+    // exact same, now-stale intervention object a second time.
+    const secondResume = await resumeCapability(intervention, capability, {}, { ...deps(makePolicy()), surface });
+    expect(secondResume.status).toBe("failed");
+    if (secondResume.status === "failed") {
+      expect(secondResume.failure.code).toBe("INTERVENTION_CONSUMED");
+      expect(secondResume.failure.message).toContain(intervention.interventionId);
+    }
+    // The step must not have been re-executed a second time.
+    expect(surface.acted).toHaveLength(1);
+
+    // Any caller that reads intervention.json fresh, rather than reusing
+    // the in-memory object, sees the same thing.
+    const onDisk = await readIntervention(runDir);
+    expect(onDisk.status).toBe("resolved");
   });
 
   it("refuses to continue when the precondition still does not hold, rather than trusting that the human is finished", async () => {

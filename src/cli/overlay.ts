@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { renderCapability } from "../artifact/render.js";
@@ -13,7 +13,15 @@ import { parseCapability } from "../artifact/schema.js";
  * a second tenant, from an existing capability - text substitution only,
  * per overlay.ts's own scope. The result always starts `draft`: nobody has
  * reviewed *these* descriptors yet, whatever the source capability's own
- * approval state was.
+ * approval state was. The `id` inside the file is tenant-qualified by
+ * `applyOverlay` itself, so the filename's `.<tenant>` and the id's own
+ * `.<tenant>` suffix are the same one, not two.
+ *
+ * Refuses to overwrite an existing artifact at the computed path unless
+ * `--force` is given - a second overlay run for the same tenant is
+ * ordinary (rerunning after fixing an `--override` typo, say), but
+ * clobbering whatever a reviewer may have already looked at, with no
+ * confirmation and no diff, is not something to do by default.
  */
 
 interface Args {
@@ -21,6 +29,7 @@ interface Args {
   tenant: string;
   entryPoint: string;
   overrides: Record<string, string>;
+  force: boolean;
 }
 
 function parseArgs(argv: readonly string[]): Args {
@@ -28,6 +37,7 @@ function parseArgs(argv: readonly string[]): Args {
   const overrides: Record<string, string> = {};
   let tenant: string | undefined;
   let entryPoint: string | undefined;
+  let force = false;
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === "--tenant") {
@@ -40,15 +50,26 @@ function parseArgs(argv: readonly string[]): Args {
       const eq = pair.indexOf("=");
       if (eq < 0) throw new Error(`--override "${pair}" is not in from=to form`);
       overrides[pair.slice(0, eq)] = pair.slice(eq + 1);
+    } else if (flag === "--force") {
+      force = true;
     } else {
       positional.push(flag as string);
     }
   }
   const artifactPath = positional[0];
   if (!artifactPath || !tenant || !entryPoint) {
-    throw new Error('usage: npm run overlay -- <artifact.json> --tenant <id> --entry-point <url> [--override "from=to" ...]');
+    throw new Error('usage: npm run overlay -- <artifact.json> --tenant <id> --entry-point <url> [--override "from=to" ...] [--force]');
   }
-  return { artifactPath, tenant, entryPoint, overrides };
+  return { artifactPath, tenant, entryPoint, overrides, force };
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function main(): Promise<void> {
@@ -56,13 +77,38 @@ async function main(): Promise<void> {
 
   const raw = JSON.parse(await readFile(args.artifactPath, "utf8")) as unknown;
   const capability = parseCapability(raw);
-  const overlaid = applyOverlay(capability, { tenant: args.tenant, entryPoint: args.entryPoint, textOverrides: args.overrides });
+  const { capability: overlaid, unmatchedOverrides } = applyOverlay(capability, {
+    tenant: args.tenant,
+    entryPoint: args.entryPoint,
+    textOverrides: args.overrides,
+  });
+
+  // An override that matched nothing did nothing - almost always a typo in
+  // the --override's "from" side, and otherwise silent until a much later,
+  // harder-to-diagnose replay failure.
+  for (const key of unmatchedOverrides) {
+    console.warn(`[overlay] warning: --override "${key}=${args.overrides[key]}" matched no name/label text anywhere in the capability - check for a typo`);
+  }
 
   const outDir = join(process.cwd(), "artifacts");
   await mkdir(outDir, { recursive: true });
-  const basename = `${overlaid.id}.${overlaid.target.tenant}.v${overlaid.version}`;
+  // overlaid.id is already tenant-qualified (applyOverlay appends
+  // .{tenant}) - the filename just adds the version, matching every other
+  // artifact's <id>.v<version> convention instead of naming the tenant twice.
+  const basename = `${overlaid.id}.v${overlaid.version}`;
   const jsonPath = join(outDir, `${basename}.json`);
   const mdPath = join(outDir, `${basename}.md`);
+
+  if (!args.force) {
+    const clashes = (await Promise.all([exists(jsonPath), exists(mdPath)])).some(Boolean);
+    if (clashes) {
+      throw new Error(
+        `${jsonPath} (or its .md) already exists - refusing to silently overwrite it. ` +
+          `Pass --force to overwrite anyway, or bump the source capability's version first.`,
+      );
+    }
+  }
+
   await writeFile(jsonPath, JSON.stringify(overlaid, null, 2), "utf8");
   await writeFile(mdPath, renderCapability(overlaid), "utf8");
 

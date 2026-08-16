@@ -37,10 +37,27 @@ export interface CapabilitySummary {
 export async function loadCatalog(artifactsDir: string): Promise<Capability[]> {
   const entries = await readdir(artifactsDir);
   const capabilities: Capability[] = [];
+  const fileById = new Map<string, string>();
   for (const entry of entries) {
     if (!entry.endsWith(".json")) continue;
-    const raw = JSON.parse(await readFile(join(artifactsDir, entry), "utf8")) as unknown;
-    capabilities.push(parseCapability(raw));
+    let capability: Capability;
+    try {
+      const raw = JSON.parse(await readFile(join(artifactsDir, entry), "utf8")) as unknown;
+      capability = parseCapability(raw);
+    } catch (error) {
+      throw new Error(`artifact "${entry}": ${error instanceof Error ? error.message : String(error)}`);
+    }
+    // findCapability/invokeCapability key purely on id - a directory
+    // holding two capabilities that answer to the same id is ambiguous in
+    // a way that has to fail loudly here, the same way a malformed file
+    // does, rather than silently letting whichever one readdir() happens
+    // to list first win every lookup.
+    const clashingFile = fileById.get(capability.id);
+    if (clashingFile) {
+      throw new Error(`duplicate capability id "${capability.id}": both "${clashingFile}" and "${entry}" claim it`);
+    }
+    fileById.set(capability.id, entry);
+    capabilities.push(capability);
   }
   return capabilities;
 }

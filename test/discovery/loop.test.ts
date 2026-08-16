@@ -194,6 +194,74 @@ describe("policy enforcement inside discovery", () => {
     expect(outcome.stopReason).toBe("policy_blocked");
     expect(surface.actedOn).toHaveLength(0);
   });
+
+  it("blocks an irreversible-tier action even though its route is allowed - discovery gets the same tier gate replay does", async () => {
+    const raw: RawPolicyConfig = {
+      allowlist: {
+        origins: ["http://127.0.0.1:9999"],
+        routes: ["/**"],
+        denyRoutes: [],
+        actions: ["click", "fill", "select", "press", "navigate", "wait"],
+      },
+      risk: { default: "safe", rules: [{ match: { nameMatches: "\\bdelete\\b" }, tier: "irreversible" }] },
+      unattended: { requiresApproval: "approved", maxTier: "elevated", onIrreversible: "escalate" },
+      redaction: { patterns: [], fieldNames: [], placeholder: "[redacted:{name}]" },
+    };
+    const policy = loadPolicy(raw);
+    const snapshot: UISnapshot = {
+      snapshotId: "s",
+      takenAt: "t",
+      kind: "web",
+      location: LOCATION,
+      title: "Member Detail",
+      nodes: [node({ role: "button", name: "Delete Member" })],
+      digest: "d",
+    };
+    const planner = new ScriptedPlanner([{ action: "click", index: 0, intent: "click the Delete Member button" }]);
+    const surface = new FakeSurface(snapshot);
+    const trace = new TraceWriter(runDir);
+    const outcome = await runDiscovery(GOAL, {
+      runId: "r-tier",
+      surface,
+      planner,
+      policy,
+      costGovernor: new CostGovernor(0),
+      trace,
+    });
+
+    // Only the allowlist/route checks used to be enforced here; the tier
+    // itself was computed but never consulted, so a model could click
+    // something the policy's own risk rules mark irreversible as long as
+    // the route was allowed. This is the fix for that gap.
+    expect(outcome.stopReason).toBe("policy_blocked");
+    expect(surface.actedOn).toHaveLength(0);
+    expect(outcome.steps).toHaveLength(0);
+  });
+
+  it("blocks a query-string-routed dangerous action, not just a path-segment one", async () => {
+    const raw: RawPolicyConfig = {
+      allowlist: {
+        origins: ["http://127.0.0.1:9999"],
+        routes: ["/**"],
+        // The path-segment style ("/servicing/**/delete") can never match a
+        // legacy .asp app that routes its dangerous actions through a query
+        // string instead (?fn=delete) - this pattern has to reach the query
+        // string to have any effect at all.
+        denyRoutes: ["/servicing/**?fn=delete*"],
+        actions: ["click", "fill", "select", "press", "navigate", "wait"],
+      },
+      risk: { default: "safe", rules: [] },
+      unattended: { requiresApproval: "approved", maxTier: "elevated", onIrreversible: "escalate" },
+      redaction: { patterns: [], fieldNames: [], placeholder: "[redacted:{name}]" },
+    };
+    const policy = loadPolicy(raw);
+    const planner = new ScriptedPlanner([
+      { action: "navigate", url: "http://127.0.0.1:9999/servicing/mbr.asp?fn=delete&mbr=100234", intent: "go delete the member" },
+    ]);
+    const { outcome, surface } = await run(planner, {}, policy);
+    expect(outcome.stopReason).toBe("policy_blocked");
+    expect(surface.actedOn).toHaveLength(0);
+  });
 });
 
 describe("redaction inside discovery", () => {
@@ -226,7 +294,10 @@ describe("redaction inside discovery", () => {
 
   it("sends the real value to the surface but never records it, for a field the policy names as sensitive", async () => {
     const planner = new ScriptedPlanner([
-      { action: "fill", index: 1, text: "hunter2", intent: "enter the password" },
+      // A real model narrates its own decision by repeating the value it
+      // just typed - "enter the password" would never have caught the
+      // intent-field leak this is a regression test for.
+      { action: "fill", index: 1, text: "hunter2", intent: "Type the password hunter2 into the Password field" },
       { action: "finish", intent: "done", outputs: {} },
     ]);
     const surface = new FakeSurface(makeSnapshotWithPassword());
@@ -244,11 +315,14 @@ describe("redaction inside discovery", () => {
     expect(surface.actedOn).toHaveLength(1);
     expect(surface.actedOn[0]).toMatchObject({ kind: "fill", text: "hunter2" });
 
-    // Nothing that gets persisted ever sees it.
+    // Nothing that gets persisted ever sees it - including the model's own
+    // free-text narration of the decision.
     expect(outcome.steps).toHaveLength(1);
     const stored = outcome.steps[0]!;
     expect(stored.sensitive).toBe(true);
     expect(stored.action).toMatchObject({ kind: "fill", text: "[redacted:field]" });
+    expect(stored.intent).not.toContain("hunter2");
+    expect(stored.intent).toContain("[redacted:field]");
 
     const traceContents = await readFile(join(runDir, "trace.jsonl"), "utf8");
     expect(traceContents).not.toContain("hunter2");

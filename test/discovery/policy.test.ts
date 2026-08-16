@@ -51,6 +51,24 @@ describe("the guardrail model", () => {
     if (!result.allowed) expect(result.reason).toContain("explicitly denied");
   });
 
+  it("matches denyRoutes against the query string, not just the path segment", () => {
+    // The path-segment style deny rule above ("/servicing/**/delete") can
+    // never fire against a query-string-routed action - a pattern that
+    // targets the query string has to actually see it.
+    const withQueryDeny = loadPolicy({
+      ...raw,
+      allowlist: { ...raw.allowlist, denyRoutes: ["/servicing/**?fn=delete*"] },
+    });
+    const blocked = checkAction(click(), "http://127.0.0.1:4501/servicing/mbr.asp?fn=delete&mbr=100234", withQueryDeny);
+    expect(blocked.allowed).toBe(false);
+    if (!blocked.allowed) expect(blocked.reason).toContain("explicitly denied");
+
+    // A route that merely contains "delete" outside the query string it is
+    // meant to gate must not be caught by the same pattern.
+    const notBlocked = checkAction(click(), "http://127.0.0.1:4501/servicing/mbr.asp?fn=srch", withQueryDeny);
+    expect(notBlocked.allowed).toBe(true);
+  });
+
   it("blocks an action kind that is not in the allowlist", () => {
     const result = checkAction({ kind: "navigate", to: "http://127.0.0.1:4501/servicing/mbr.asp" }, HERE, {
       ...policy,

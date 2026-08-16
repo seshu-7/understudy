@@ -9,6 +9,7 @@
       "/accounts/**",
       "/login"
     ],
+    "$comment": "routes/denyRoutes are matched against pathname + query string, so a query-string-routed action (?fn=delete, the norm for a legacy .asp app) can be denied too, not just a REST-style path segment.",
     "denyRoutes": [
       "/admin/**",
       "/servicing/**/delete",
@@ -28,7 +29,7 @@
   },
 
   "unattended": {
-    "$comment": "What replay may do with no human watching.",
+    "$comment": "What may run with no human confirming each individual step - replay with attended:false, and discovery, which has no per-step confirmation mechanism at all. requiresApproval only gates replay (discovery has no capability yet to be approved); maxTier/onIrreversible gate both.",
     "requiresApproval": "approved",
     "maxTier": "elevated",
     "onIrreversible": "escalate"

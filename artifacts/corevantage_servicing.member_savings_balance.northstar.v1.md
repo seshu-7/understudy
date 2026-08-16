@@ -2,7 +2,7 @@
 
 look up member {member_number} and read their current savings balance
 
-**id** `corevantage_servicing.member_savings_balance` · **version** 1 · **approval** `draft` · **content hash** `d4171b8d14de591e`
+**id** `corevantage_servicing.member_savings_balance.northstar` · **version** 1 · **approval** `draft` · **content hash** `d4171b8d14de591e`
 
 ## Target
 

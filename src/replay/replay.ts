@@ -1,10 +1,10 @@
 import { describeDetector, describeTarget } from "../artifact/format.js";
-import type { Capability, Detector, OutcomeSpec, ParamSpec, Remedy, RiskTier, SemanticDescriptor, Step, ValueSource } from "../artifact/schema.js";
-import { checkAction, type Policy } from "../discovery/policy.js";
+import type { Capability, Detector, OutcomeSpec, ParamSpec, Remedy, SemanticDescriptor, Step, ValueSource } from "../artifact/schema.js";
+import { checkAction, unattendedGate, type Policy } from "../discovery/policy.js";
 import { redactSnapshot } from "../discovery/redact.js";
 import { match } from "../surface/match.js";
 import { coerceOutput, evaluateDetector, extractOutput, type DetectorResult } from "./detect.js";
-import { type Intervention, writeIntervention } from "./intervention.js";
+import { readIntervention, type Intervention, writeIntervention } from "./intervention.js";
 import { acquire, initialLease, type SessionLease } from "./lease.js";
 import { ReplayTraceWriter } from "./trace.js";
 import type { Action, NodeRef, Surface, UISnapshot } from "../surface/types.js";
@@ -53,22 +53,6 @@ export interface ReplayDeps {
   lease?: SessionLease;
 }
 
-const TIER_ORDER: Record<RiskTier, number> = { safe: 0, elevated: 1, irreversible: 2 };
-
-function unattendedGate(tier: RiskTier, policy: Policy): { allowed: true } | { allowed: false; escalate: boolean; reason: string } {
-  if (tier === "irreversible") {
-    return {
-      allowed: false,
-      escalate: policy.unattended.onIrreversible === "escalate",
-      reason: "irreversible actions never run unattended, regardless of approval state",
-    };
-  }
-  if (TIER_ORDER[tier] > TIER_ORDER[policy.unattended.maxTier]) {
-    return { allowed: false, escalate: false, reason: `risk tier "${tier}" exceeds the unattended ceiling "${policy.unattended.maxTier}"` };
-  }
-  return { allowed: true };
-}
-
 function resolveValue(value: ValueSource, inputs: Readonly<Record<string, string>>): string {
   if (value.kind === "literal") return value.value;
   const resolved = inputs[value.name];
@@ -78,6 +62,31 @@ function resolveValue(value: ValueSource, inputs: Readonly<Record<string, string
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const STEP_TIMED_OUT = Symbol("step-timed-out");
+
+/** Races a promise against a step's own `timeoutMs` budget. `surface.act()`
+ *  has no bound of its own - a detached frame, a click an overlay silently
+ *  swallows, a dead browser process can all hang it forever - so replay has
+ *  to be the one to give up rather than wedge indefinitely. Distinct from a
+ *  thrown error (SURFACE_ERROR, which fires as soon as the promise rejects)
+ *  and from a checkpoint that never holds (CHECKPOINT_FAILED, which only
+ *  starts counting once the action has already returned): this is
+ *  specifically "the action call itself never returned at all". JS has no
+ *  promise cancellation, so a genuinely hung `work` keeps running in the
+ *  background after this resolves - the same unavoidable trade-off any
+ *  timeout race makes. */
+async function withStepTimeout<T>(work: Promise<T>, timeoutMs: number): Promise<T | typeof STEP_TIMED_OUT> {
+  let timer!: ReturnType<typeof setTimeout>;
+  const timedOut = new Promise<typeof STEP_TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(STEP_TIMED_OUT), timeoutMs);
+  });
+  try {
+    return await Promise.race([work, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function isSensitiveValueSource(value: ValueSource, capability: Capability): boolean {
@@ -383,7 +392,18 @@ export async function replayCapability(
     }
 
     try {
-      await surface.act(action);
+      const result = await withStepTimeout(surface.act(action), step.timeoutMs);
+      if (result === STEP_TIMED_OUT) {
+        return fail(
+          step,
+          "STEP_TIMEOUT",
+          `the action completes within ${step.timeoutMs}ms`,
+          "the action call never returned",
+          `step ${step.index}'s action did not complete within its ${step.timeoutMs}ms budget`,
+          undefined,
+          snapshot,
+        );
+      }
     } catch (error) {
       return fail(step, "SURFACE_ERROR", "action executes without throwing", String(error), String(error), undefined, snapshot);
     }
@@ -475,6 +495,47 @@ export async function resumeCapability(
   deps: ReplayDeps,
 ): Promise<ReplayResult> {
   const { surface, trace, policy } = deps;
+
+  // The caller's `intervention` may be a snapshot read before this exact
+  // handoff was already consumed - by a previous resume, or by a second,
+  // concurrent caller holding the same in-memory copy. Trusting the status
+  // field on the parameter alone would miss that race; the on-disk record
+  // is the one source of truth, the same way a resume re-checks its
+  // precondition against a fresh observation rather than trusting a
+  // human's say-so. Refused before the surface is even observed, let alone
+  // touched.
+  const onDisk = await readIntervention(trace.runDir).catch(() => undefined);
+  const stillOpen = onDisk !== undefined && onDisk.interventionId === intervention.interventionId && onDisk.status === "open";
+  if (!stillOpen) {
+    const observed =
+      onDisk === undefined
+        ? "no intervention record found on disk"
+        : onDisk.interventionId !== intervention.interventionId
+          ? `the current on-disk intervention is a different one ("${onDisk.interventionId}")`
+          : `its on-disk status is "${onDisk.status}"`;
+    const failure: ReplayResult = {
+      status: "failed",
+      runId: intervention.runId,
+      capabilityId: capability.id,
+      capabilityVersion: capability.version,
+      startedAt: intervention.createdAt,
+      finishedAt: new Date().toISOString(),
+      stepsAttempted: intervention.resumeAt,
+      recoveries: intervention.recoveriesSoFar,
+      evidenceDir: trace.runDir,
+      failure: {
+        code: "INTERVENTION_CONSUMED",
+        stepIndex: intervention.resumeAt,
+        stepIntent: capability.steps[intervention.resumeAt]?.intent ?? "(resume point past the last step)",
+        expected: `intervention "${intervention.interventionId}" to still be open`,
+        observed,
+        message: `resume was requested for intervention "${intervention.interventionId}", but it is no longer open - nothing was retried`,
+      },
+    };
+    await trace.result(failure);
+    return failure;
+  }
+
   const snapshot = await surface.observe();
 
   if (intervention.precondition) {
@@ -514,6 +575,10 @@ export async function resumeCapability(
     }
   }
 
+  // Committed to continuing past this handoff now - mark it spent before
+  // acting, not after, so a concurrent or crash-and-retry second resume
+  // reads "resolved" rather than racing this same "open" record.
+  await writeIntervention(trace.runDir, { ...intervention, status: "resolved" });
   await trace.event("handoff", intervention.resumeAt, { from: "human", to: "automation", interventionId: intervention.interventionId });
 
   return replayCapability(capability, inputs, {

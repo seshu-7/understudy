@@ -96,7 +96,9 @@ export type FailureCode =
    *  to execute the script; this means replay executed exactly as recorded
    *  and the screen it reached is a known bad outcome, not an unexpected one. */
   | "OUTCOME_HARD_FAILURE"
-  /** The step took longer than its budget. */
+  /** The action call itself never returned within the step's `timeoutMs`
+   *  budget - distinct from CHECKPOINT_FAILED, which only starts counting
+   *  once the action has already returned. */
   | "STEP_TIMEOUT"
   /** Policy refused the action — off-allowlist route, or an irreversible
    *  step attempted in unattended mode. */
@@ -106,7 +108,13 @@ export type FailureCode =
   /** An observation matched nothing the artifact knows about. Deliberately
    *  distinct from the others: this is the one that means the recording has
    *  drifted from reality and a human should look at it. */
-  | "UNRECOGNISED_STATE";
+  | "UNRECOGNISED_STATE"
+  /** `resumeCapability` was called against an intervention that was already
+   *  resumed (or abandoned) once before. Nothing was retried and nothing
+   *  was touched on the live surface - a second, stale resume call on the
+   *  same handoff is refused rather than silently re-executing the step it
+   *  was blocked on. */
+  | "INTERVENTION_CONSUMED";
 
 export interface RecoveryRecord {
   stepIndex: number;

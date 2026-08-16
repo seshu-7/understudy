@@ -45,7 +45,7 @@ function baseCapability(): Capability {
 
 describe("applyOverlay", () => {
   it("rewrites a step target's name, leaving unrelated text untouched", () => {
-    const overlaid = applyOverlay(baseCapability(), {
+    const { capability: overlaid } = applyOverlay(baseCapability(), {
       tenant: "northstar",
       entryPoint: "http://127.0.0.1:4502/servicing/login.asp",
       textOverrides: { Search: "Find Member" },
@@ -60,7 +60,7 @@ describe("applyOverlay", () => {
   });
 
   it("rewrites the checkpoint and the outcome detector built from the same renamed text", () => {
-    const overlaid = applyOverlay(baseCapability(), {
+    const { capability: overlaid } = applyOverlay(baseCapability(), {
       tenant: "northstar",
       entryPoint: "http://127.0.0.1:4502/servicing/login.asp",
       textOverrides: { Search: "Find Member" },
@@ -77,7 +77,7 @@ describe("applyOverlay", () => {
   });
 
   it("leaves a text with no matching override alone", () => {
-    const overlaid = applyOverlay(baseCapability(), {
+    const { capability: overlaid } = applyOverlay(baseCapability(), {
       tenant: "northstar",
       entryPoint: "http://127.0.0.1:4502/servicing/login.asp",
       textOverrides: { "Some Other Label": "Whatever" },
@@ -86,8 +86,43 @@ describe("applyOverlay", () => {
     if (step.action.kind === "click") expect(step.action.target.name).toEqual({ kind: "normalized", value: "Search" });
   });
 
+  it("reports an override key as unmatched when it matches nothing, so a typo is not silent", () => {
+    const { unmatchedOverrides } = applyOverlay(baseCapability(), {
+      tenant: "northstar",
+      entryPoint: "http://127.0.0.1:4502/servicing/login.asp",
+      textOverrides: { Serach: "Find Member" }, // typo'd key, never matches "Search"
+    });
+    expect(unmatchedOverrides).toEqual(["Serach"]);
+  });
+
+  it("reports an override key as matched when it hits text in more than one place", () => {
+    // "Search" appears in both the step's target and the outcome detector
+    // built from the same text (see the test above) - one hit anywhere is
+    // enough to count the key as matched, not "matched everywhere it could
+    // have applied".
+    const { unmatchedOverrides } = applyOverlay(baseCapability(), {
+      tenant: "northstar",
+      entryPoint: "http://127.0.0.1:4502/servicing/login.asp",
+      textOverrides: { Search: "Find Member" },
+    });
+    expect(unmatchedOverrides).toEqual([]);
+  });
+
+  it("tenant-qualifies the id, so a catalog keyed on id can tell the two tenants apart", () => {
+    const original = baseCapability();
+    const { capability: overlaid } = applyOverlay(original, {
+      tenant: "northstar",
+      entryPoint: "http://127.0.0.1:4502/servicing/login.asp",
+      textOverrides: {},
+    });
+    expect(overlaid.id).toBe(`${original.id}.northstar`);
+    // The original capability's own id is untouched - only the returned
+    // copy is qualified.
+    expect(original.id).toBe("corevantage_servicing.lookup");
+  });
+
   it("updates the target binding to the new tenant and entry point", () => {
-    const overlaid = applyOverlay(baseCapability(), {
+    const { capability: overlaid } = applyOverlay(baseCapability(), {
       tenant: "northstar",
       entryPoint: "http://127.0.0.1:4502/servicing/login.asp",
       textOverrides: {},
@@ -103,19 +138,19 @@ describe("applyOverlay", () => {
   });
 
   it("always starts draft and marks the result human-edited, regardless of the source capability's approval", () => {
-    const overlaid = applyOverlay(baseCapability(), { tenant: "northstar", entryPoint: "http://x/", textOverrides: {} });
+    const { capability: overlaid } = applyOverlay(baseCapability(), { tenant: "northstar", entryPoint: "http://x/", textOverrides: {} });
     expect(overlaid.approval).toBe("draft");
     expect(overlaid.provenance.humanEdited).toBe(true);
   });
 
   it("recomputes the content hash - an overlaid capability is honestly a different program", () => {
     const original = baseCapability();
-    const overlaid = applyOverlay(original, { tenant: "northstar", entryPoint: "http://127.0.0.1:4502/servicing/login.asp", textOverrides: { Search: "Find Member" } });
+    const { capability: overlaid } = applyOverlay(original, { tenant: "northstar", entryPoint: "http://127.0.0.1:4502/servicing/login.asp", textOverrides: { Search: "Find Member" } });
     expect(overlaid.contentHash).not.toBe(original.contentHash);
   });
 
   it("produces something the schema itself accepts", () => {
-    const overlaid = applyOverlay(baseCapability(), {
+    const { capability: overlaid } = applyOverlay(baseCapability(), {
       tenant: "northstar",
       entryPoint: "http://127.0.0.1:4502/servicing/login.asp",
       textOverrides: { Search: "Find Member" },
