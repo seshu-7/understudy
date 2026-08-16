@@ -91,6 +91,11 @@ export type FailureCode =
   | "CHECKPOINT_FAILED"
   /** A declared recoverable condition exhausted its bounded remedy. */
   | "RECOVERY_EXHAUSTED"
+  /** A declared `hard_failure` outcome's detector matched. Distinct from
+   *  every other code here: those all mean replay itself broke down trying
+   *  to execute the script; this means replay executed exactly as recorded
+   *  and the screen it reached is a known bad outcome, not an unexpected one. */
+  | "OUTCOME_HARD_FAILURE"
   /** The step took longer than its budget. */
   | "STEP_TIMEOUT"
   /** Policy refused the action — off-allowlist route, or an irreversible
