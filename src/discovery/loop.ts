@@ -3,6 +3,7 @@ import { formatObservation } from "./observe-format.js";
 import { checkAction, type Policy } from "./policy.js";
 import { CostCeilingExceededError, CostGovernor } from "./cost.js";
 import { groundOutputs, type OutputGrounding } from "./ground.js";
+import { fieldIsSensitiveByName, type RedactionPolicy } from "./redact.js";
 import { TraceWriter } from "./trace.js";
 import type { Planner, PlannerDecision } from "./planner.js";
 import type { DiscoveredStep, DiscoveryGoal, DiscoveryOutcome, StopReason } from "./types.js";
@@ -92,6 +93,38 @@ function decisionKeyOf(decision: PlannerDecision): string {
   return JSON.stringify({ a: decision.action, i: decision.index, t: decision.text, o: decision.option, u: decision.url });
 }
 
+/** A fill/select decision counts as sensitive when the control it targets is
+ *  labelled the way the redaction policy already treats a value as
+ *  sensitive regardless of pattern (password, PIN, SSN, ...) - checked
+ *  against the observation's own indexed node list, before resolution, so
+ *  the decision trace event can be redacted at the same moment the model's
+ *  choice is first recorded, not only after the action executes. */
+function isSensitiveDecision(decision: PlannerDecision, indexed: readonly UINode[], policy: RedactionPolicy): boolean {
+  if (decision.action !== "fill" && decision.action !== "select") return false;
+  const node = decision.index !== undefined ? indexed[decision.index] : undefined;
+  return fieldIsSensitiveByName(node?.label ?? node?.name ?? "", policy);
+}
+
+function redactedPlaceholder(policy: RedactionPolicy): string {
+  return policy.placeholder.replace("{name}", "field");
+}
+
+function redactDecisionForTrace(decision: PlannerDecision, policy: RedactionPolicy): PlannerDecision {
+  const placeholder = redactedPlaceholder(policy);
+  return {
+    ...decision,
+    ...(decision.text !== undefined ? { text: placeholder } : {}),
+    ...(decision.option !== undefined ? { option: placeholder } : {}),
+  };
+}
+
+function redactActionForStorage(action: Action, policy: RedactionPolicy): Action {
+  const placeholder = redactedPlaceholder(policy);
+  if (action.kind === "fill") return { ...action, text: placeholder };
+  if (action.kind === "select") return { ...action, option: placeholder };
+  return action;
+}
+
 export async function runDiscovery(goal: DiscoveryGoal, deps: RunDiscoveryDeps): Promise<DiscoveryOutcome> {
   const { runId, surface, planner, policy, costGovernor, trace, options = {} } = deps;
   const maxSteps = options.maxSteps ?? 20;
@@ -154,7 +187,8 @@ export async function runDiscovery(goal: DiscoveryGoal, deps: RunDiscoveryDeps):
     }
 
     const decision = plannerResult.decision;
-    await trace.event("decision", index, decision);
+    const sensitive = isSensitiveDecision(decision, observation.indexed, policy.redaction);
+    await trace.event("decision", index, sensitive ? redactDecisionForTrace(decision, policy.redaction) : decision);
 
     const key = decisionKeyOf(decision);
     repeatCount = key === lastDecisionKey ? repeatCount + 1 : 1;
@@ -200,6 +234,9 @@ export async function runDiscovery(goal: DiscoveryGoal, deps: RunDiscoveryDeps):
     }
 
     try {
+      // Always the real, unredacted action - the live surface has to receive
+      // the actual value typed to work at all. Only what gets traced and
+      // stored below is ever redacted.
       await surface.act(resolved.action);
     } catch (error) {
       historyLines.push(`${index}. that action failed to execute (${String(error)}) - try a different approach`);
@@ -211,9 +248,10 @@ export async function runDiscovery(goal: DiscoveryGoal, deps: RunDiscoveryDeps):
 
     const shot = await surface.capture();
     await trace.screenshot(index, shot.bytes);
-    await trace.event("action", index, { action: resolved.action, intent: decision.intent });
+    const storedAction = sensitive ? redactActionForStorage(resolved.action, policy.redaction) : resolved.action;
+    await trace.event("action", index, { action: storedAction, intent: decision.intent });
 
-    steps.push({ index, intent: decision.intent, action: resolved.action, descriptor: resolved.descriptor, confirmed: false });
+    steps.push({ index, intent: decision.intent, action: storedAction, descriptor: resolved.descriptor, sensitive, confirmed: false });
     historyLines.push(`${index}. ${decision.intent}`);
     previousSnapshot = snapshot;
   }

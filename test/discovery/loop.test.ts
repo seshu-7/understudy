@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -193,6 +193,77 @@ describe("policy enforcement inside discovery", () => {
     const { outcome, surface } = await run(planner);
     expect(outcome.stopReason).toBe("policy_blocked");
     expect(surface.actedOn).toHaveLength(0);
+  });
+});
+
+describe("redaction inside discovery", () => {
+  function makeSnapshotWithPassword(): UISnapshot {
+    return {
+      snapshotId: "s",
+      takenAt: "t",
+      kind: "web",
+      location: LOCATION,
+      title: "Sign On",
+      nodes: [node({ role: "button", name: "Sign On" }), node({ role: "textbox", label: "Password" })],
+      digest: "d",
+    };
+  }
+
+  function makePolicyWithFieldRedaction(): Policy {
+    const raw: RawPolicyConfig = {
+      allowlist: {
+        origins: ["http://127.0.0.1:9999"],
+        routes: ["/**"],
+        denyRoutes: [],
+        actions: ["click", "fill", "select", "press", "navigate", "wait"],
+      },
+      risk: { default: "safe", rules: [] },
+      unattended: { requiresApproval: "approved", maxTier: "elevated", onIrreversible: "escalate" },
+      redaction: { patterns: [], fieldNames: ["password"], placeholder: "[redacted:{name}]" },
+    };
+    return loadPolicy(raw);
+  }
+
+  it("sends the real value to the surface but never records it, for a field the policy names as sensitive", async () => {
+    const planner = new ScriptedPlanner([
+      { action: "fill", index: 1, text: "hunter2", intent: "enter the password" },
+      { action: "finish", intent: "done", outputs: {} },
+    ]);
+    const surface = new FakeSurface(makeSnapshotWithPassword());
+    const trace = new TraceWriter(runDir);
+    const outcome = await runDiscovery(GOAL, {
+      runId: "r-redact",
+      surface,
+      planner,
+      policy: makePolicyWithFieldRedaction(),
+      costGovernor: new CostGovernor(0),
+      trace,
+    });
+
+    // The live surface still has to receive the real value to work at all.
+    expect(surface.actedOn).toHaveLength(1);
+    expect(surface.actedOn[0]).toMatchObject({ kind: "fill", text: "hunter2" });
+
+    // Nothing that gets persisted ever sees it.
+    expect(outcome.steps).toHaveLength(1);
+    const stored = outcome.steps[0]!;
+    expect(stored.sensitive).toBe(true);
+    expect(stored.action).toMatchObject({ kind: "fill", text: "[redacted:field]" });
+
+    const traceContents = await readFile(join(runDir, "trace.jsonl"), "utf8");
+    expect(traceContents).not.toContain("hunter2");
+    expect(traceContents).toContain("[redacted:field]");
+
+    const summaryContents = await readFile(join(runDir, "summary.json"), "utf8");
+    expect(summaryContents).not.toContain("hunter2");
+  });
+
+  it("leaves an ordinary field's value untouched, both live and recorded", async () => {
+    const planner = new ScriptedPlanner([{ action: "fill", index: 1, text: "100234", intent: "enter the member number" }]);
+    const { outcome, surface } = await run(planner, {}, makePolicy());
+    expect(surface.actedOn[0]).toMatchObject({ kind: "fill", text: "100234" });
+    expect(outcome.steps[0]!.sensitive).toBe(false);
+    expect(outcome.steps[0]!.action).toMatchObject({ kind: "fill", text: "100234" });
   });
 });
 

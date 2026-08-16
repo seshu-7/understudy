@@ -135,6 +135,28 @@ function valueSourceFor(raw: string, label: string | undefined, goalText: string
   return { kind: "param", name };
 }
 
+/** The path for a step discovery already flagged sensitive - loop.ts has
+ *  already redacted `step.action.text`/`.option` into an identical
+ *  placeholder before this ever runs, so there is no real value left to
+ *  dedupe on or to record as an `example`, and deliberately no attempt to:
+ *  two different sensitive fields redacted to the same placeholder text
+ *  must not collapse into one parameter just because their (fake) raw
+ *  values happen to match. Unlike valueSourceFor, this never falls back to
+ *  a literal - a credential is not "caller data that happened not to be
+ *  mentioned in the goal," it must never be recorded in the artifact at
+ *  all, mentioned or not. */
+function sensitiveValueSourceFor(label: string | undefined, acc: ParamAccumulator): ValueSource {
+  const name = uniqueName(toSnakeCase(label ?? "value"), acc.usedNames);
+  acc.params.push({
+    name,
+    type: "string",
+    description: `"${label ?? "this field"}" - a sensitive value. Never recorded; must be supplied at replay time.`,
+    required: true,
+    sensitive: true,
+  });
+  return { kind: "param", name };
+}
+
 /** Compiles one discovered step's action, given the *next* step for
  *  checkpoint inference (undefined for the last step - see compileCapability
  *  for how that case is handled instead). */
@@ -157,14 +179,18 @@ function compileStep(
       action = {
         kind: "fill",
         target: step.descriptor!,
-        value: valueSourceFor(step.action.text, descriptorLabel(step.descriptor!), goalText, acc),
+        value: step.sensitive
+          ? sensitiveValueSourceFor(descriptorLabel(step.descriptor!), acc)
+          : valueSourceFor(step.action.text, descriptorLabel(step.descriptor!), goalText, acc),
       };
       break;
     case "select":
       action = {
         kind: "select",
         target: step.descriptor!,
-        value: valueSourceFor(step.action.option, descriptorLabel(step.descriptor!), goalText, acc),
+        value: step.sensitive
+          ? sensitiveValueSourceFor(descriptorLabel(step.descriptor!), acc)
+          : valueSourceFor(step.action.option, descriptorLabel(step.descriptor!), goalText, acc),
       };
       break;
     case "press":

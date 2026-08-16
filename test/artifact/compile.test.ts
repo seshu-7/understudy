@@ -40,8 +40,8 @@ const balanceText = descriptor({
   ordinal: 6,
 });
 
-function step(index: number, intent: string, action: DiscoveredStep["action"], desc: SemanticDescriptor | null): DiscoveredStep {
-  return { index, intent, action, descriptor: desc, confirmed: false };
+function step(index: number, intent: string, action: DiscoveredStep["action"], desc: SemanticDescriptor | null, sensitive = false): DiscoveredStep {
+  return { index, intent, action, descriptor: desc, sensitive, confirmed: false };
 }
 
 /** Test-only narrowing helper - a "pattern" TextMatch carries `source`, not
@@ -154,6 +154,49 @@ describe("parameter deduplication", () => {
     expect(capability.inputs).toHaveLength(1);
     const values = capability.steps.map((s) => (s.action.kind === "fill" ? s.action.value : null));
     expect(values[0]).toEqual(values[1]);
+  });
+});
+
+describe("sensitive fields", () => {
+  const passwordField = descriptor({ role: "textbox", label: { kind: "normalized", value: "Password" } });
+
+  it("always parameterises a sensitive step, ignoring goalMentions, and never records the (already-redacted) value", () => {
+    const outcome = successfulOutcome({
+      steps: [step(0, "enter the password", { kind: "fill", target: nodeRef("a"), text: "[redacted:field]" }, passwordField, true)],
+      extractedOutputs: {},
+      outputGroundings: [],
+    });
+    const capability = compileCapability(outcome);
+
+    expect(capability.inputs).toHaveLength(1);
+    const param = capability.inputs[0]!;
+    expect(param.sensitive).toBe(true);
+    expect(param.required).toBe(true);
+    expect(param.example).toBeUndefined();
+
+    const fillStep = capability.steps[0]!;
+    expect(fillStep.action).toEqual({ kind: "fill", target: passwordField, value: { kind: "param", name: param.name } });
+
+    // The literal redacted placeholder itself must not leak into the artifact.
+    expect(JSON.stringify(capability)).not.toContain("[redacted:field]");
+  });
+
+  it("does not collapse two different sensitive fields into one parameter, even though their redacted values are identical", () => {
+    const confirmField = descriptor({ role: "textbox", label: { kind: "normalized", value: "Confirm Password" } });
+    const outcome = successfulOutcome({
+      steps: [
+        step(0, "enter the password", { kind: "fill", target: nodeRef("a"), text: "[redacted:field]" }, passwordField, true),
+        step(1, "confirm the password", { kind: "fill", target: nodeRef("b"), text: "[redacted:field]" }, confirmField, true),
+      ],
+      extractedOutputs: {},
+      outputGroundings: [],
+    });
+    const capability = compileCapability(outcome);
+
+    expect(capability.inputs).toHaveLength(2);
+    expect(new Set(capability.inputs.map((p) => p.name)).size).toBe(2);
+    const values = capability.steps.map((s) => (s.action.kind === "fill" ? s.action.value : null));
+    expect(values[0]).not.toEqual(values[1]);
   });
 });
 

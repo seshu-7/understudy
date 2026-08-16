@@ -36,9 +36,19 @@ export type StopReason =
 export interface DiscoveredStep {
   index: number;
   intent: string;
+  /** Redacted already when `sensitive` is true - `action.text`/`.option` is
+   *  the placeholder, never the real value. The live surface still received
+   *  the real one; this is what gets persisted from here on. */
   action: Action;
   /** null only for actions with no single target - press, navigate, wait. */
   descriptor: SemanticDescriptor | null;
+  /** True when this step filled or selected a field whose label matches the
+   *  redaction policy's sensitive field names (password, PIN, SSN, ...). The
+   *  compiler reads this to force the field into a required, `sensitive`
+   *  parameter with no recorded example, regardless of whether the value
+   *  happens to appear in the goal text - a credential is not "caller data
+   *  that happened not to be mentioned," it must never be recorded at all. */
+  sensitive: boolean;
   /** Set once the action has executed and the next observation confirms the
    *  screen changed the way the model expected. Absent means unconfirmed, not
    *  failed - the loop does not retry inside discovery. */
