@@ -1,0 +1,20 @@
+{
+  "claim": "the same capability, replayed with the same inputs, takes the same path and produces the same result - by construction, since replay makes zero model calls",
+  "capability": "corevantage_servicing.member_savings_balance.v1.json",
+  "inputs": { "member_number": "100234" },
+  "runs": [
+    "../replay-1786838029329/",
+    "../replay-1786838157645/",
+    "../replay-1786838165392/"
+  ],
+  "comparison": "each run's result.json, with runId/startedAt/finishedAt/evidenceDir removed (the fields that are expected to differ per run), compared byte-for-byte",
+  "identical": true,
+  "resultExcludingRunMetadata": {
+    "status": "success",
+    "capabilityId": "corevantage_servicing.member_savings_balance",
+    "capabilityVersion": 1,
+    "stepsAttempted": 5,
+    "recoveries": [],
+    "outputs": { "savings_balance": "4,182.55" }
+  }
+}

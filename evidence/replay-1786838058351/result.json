@@ -1,0 +1,14 @@
+{
+  "status": "success",
+  "runId": "1786838058351",
+  "capabilityId": "corevantage_servicing.member_savings_balance",
+  "capabilityVersion": 1,
+  "startedAt": "2026-08-15T23:54:18.574Z",
+  "finishedAt": "2026-08-15T23:54:20.987Z",
+  "stepsAttempted": 5,
+  "recoveries": [],
+  "evidenceDir": "C:\\Users\\sesha\\dev\\understudy\\evidence\\replay-1786838058351",
+  "outputs": {
+    "savings_balance": "22,940.18"
+  }
+}

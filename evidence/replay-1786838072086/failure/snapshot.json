@@ -1,0 +1,720 @@
+{
+  "snapshotId": "cf7e125c76ee",
+  "takenAt": "2026-08-15T23:54:45.112Z",
+  "kind": "web",
+  "location": "http://127.0.0.1:4501/servicing/",
+  "title": "CoreVantage Servicing",
+  "nodes": [
+    {
+      "ref": "navfrm#0",
+      "role": "table",
+      "name": "SERVICING Member Search Account Inquiry Transaction Journal ADMIN Sign Off",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "navfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Navigation"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 168,
+        "height": 79
+      }
+    },
+    {
+      "ref": "navfrm#5",
+      "role": "text",
+      "name": "SERVICING",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "navfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Navigation"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "bounds": {
+        "x": 4.515625,
+        "y": 1,
+        "width": 64.140625,
+        "height": 12
+      }
+    },
+    {
+      "ref": "navfrm#1",
+      "role": "link",
+      "name": "Member Search",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "navfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Navigation"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "bounds": {
+        "x": 4.515625,
+        "y": 14,
+        "width": 78.6875,
+        "height": 12
+      }
+    },
+    {
+      "ref": "navfrm#2",
+      "role": "link",
+      "name": "Account Inquiry",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "navfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Navigation"
+        }
+      ],
+      "ordinal": 1,
+      "visible": true,
+      "bounds": {
+        "x": 4.515625,
+        "y": 27,
+        "width": 79.46875,
+        "height": 12
+      }
+    },
+    {
+      "ref": "navfrm#3",
+      "role": "link",
+      "name": "Transaction Journal",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "navfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Navigation"
+        }
+      ],
+      "ordinal": 2,
+      "visible": true,
+      "bounds": {
+        "x": 4.515625,
+        "y": 40,
+        "width": 96.9375,
+        "height": 12
+      }
+    },
+    {
+      "ref": "navfrm#6",
+      "role": "text",
+      "name": "ADMIN",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "navfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Navigation"
+        }
+      ],
+      "ordinal": 1,
+      "visible": true,
+      "bounds": {
+        "x": 4.515625,
+        "y": 53,
+        "width": 39.46875,
+        "height": 12
+      }
+    },
+    {
+      "ref": "navfrm#4",
+      "role": "link",
+      "name": "Sign Off",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "navfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Navigation"
+        }
+      ],
+      "ordinal": 3,
+      "visible": true,
+      "bounds": {
+        "x": 4.515625,
+        "y": 66,
+        "width": 40.5625,
+        "height": 12
+      }
+    },
+    {
+      "ref": "mainfrm#0",
+      "role": "table",
+      "name": "Member Search CoreVantage Servicing 7.2",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "bounds": {
+        "x": 4,
+        "y": 4,
+        "width": 1102,
+        "height": 22
+      }
+    },
+    {
+      "ref": "mainfrm#1",
+      "role": "table",
+      "name": "Member Search CoreVantage Servicing 7.2",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 1,
+      "visible": true,
+      "bounds": {
+        "x": 4,
+        "y": 4,
+        "width": 1102,
+        "height": 22
+      }
+    },
+    {
+      "ref": "mainfrm#10",
+      "role": "text",
+      "name": "Member Search",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "bounds": {
+        "x": 7,
+        "y": 7,
+        "width": 113.265625,
+        "height": 16
+      }
+    },
+    {
+      "ref": "mainfrm#11",
+      "role": "text",
+      "name": "CoreVantage Servicing 7.2",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 1,
+      "visible": true,
+      "bounds": {
+        "x": 969.28125,
+        "y": 9,
+        "width": 133.71875,
+        "height": 12
+      }
+    },
+    {
+      "ref": "mainfrm#2",
+      "role": "table",
+      "name": "Servicing > Member Search",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 2,
+      "visible": true,
+      "bounds": {
+        "x": 4,
+        "y": 26,
+        "width": 1102,
+        "height": 16
+      }
+    },
+    {
+      "ref": "mainfrm#12",
+      "role": "text",
+      "name": "Servicing > Member Search",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "table",
+          "name": "Member Search CoreVantage Servicing 7.2"
+        },
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "bounds": {
+        "x": 6,
+        "y": 28,
+        "width": 140.140625,
+        "height": 12
+      }
+    },
+    {
+      "ref": "mainfrm#3",
+      "role": "table",
+      "name": "Access to member 100599 is restricted. Contact Compliance (ext. 4180). Member Number (6 digits)",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 3,
+      "visible": true,
+      "bounds": {
+        "x": 4,
+        "y": 54,
+        "width": 1102,
+        "height": 137
+      }
+    },
+    {
+      "ref": "mainfrm#4",
+      "role": "table",
+      "name": "Access to member 100599 is restricted. Contact Compliance (ext. 4180).",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "table",
+          "name": "Servicing > Member Search"
+        },
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "bounds": {
+        "x": 6,
+        "y": 56,
+        "width": 420.96875,
+        "height": 24
+      }
+    },
+    {
+      "ref": "mainfrm#13",
+      "role": "text",
+      "name": "Access to member 100599 is restricted. Contact Compliance (ext. 4180).",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "table",
+          "name": "Servicing > Member Search"
+        },
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "bounds": {
+        "x": 12,
+        "y": 62,
+        "width": 408.96875,
+        "height": 12
+      }
+    },
+    {
+      "ref": "mainfrm#5",
+      "role": "form",
+      "name": "Member Number (6 digits)",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "table",
+          "name": "Servicing > Member Search"
+        },
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "bounds": {
+        "x": 6,
+        "y": 99,
+        "width": 1098,
+        "height": 74
+      }
+    },
+    {
+      "ref": "mainfrm#6",
+      "role": "table",
+      "name": "Member Number (6 digits)",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "table",
+          "name": "Servicing > Member Search"
+        },
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 1,
+      "visible": true,
+      "bounds": {
+        "x": 6,
+        "y": 99,
+        "width": 268.765625,
+        "height": 74
+      }
+    },
+    {
+      "ref": "mainfrm#14",
+      "role": "text",
+      "name": "Member Number",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "table",
+          "name": "Servicing > Member Search"
+        },
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 1,
+      "visible": true,
+      "bounds": {
+        "x": 9,
+        "y": 102,
+        "width": 84.078125,
+        "height": 12
+      }
+    },
+    {
+      "ref": "mainfrm#7",
+      "role": "textbox",
+      "name": "",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "table",
+          "name": "Servicing > Member Search"
+        },
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "label": "Member Number",
+      "value": "100599",
+      "bounds": {
+        "x": 99.078125,
+        "y": 103,
+        "width": 121,
+        "height": 21
+      }
+    },
+    {
+      "ref": "mainfrm#15",
+      "role": "text",
+      "name": "(6 digits)",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "table",
+          "name": "Servicing > Member Search"
+        },
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 2,
+      "visible": true,
+      "bounds": {
+        "x": 225.703125,
+        "y": 108,
+        "width": 46.0625,
+        "height": 12
+      }
+    },
+    {
+      "ref": "mainfrm#8",
+      "role": "button",
+      "name": "Search",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "table",
+          "name": "Servicing > Member Search"
+        },
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 0,
+      "visible": true,
+      "bounds": {
+        "x": 99.078125,
+        "y": 149,
+        "width": 58.25,
+        "height": 21
+      }
+    },
+    {
+      "ref": "mainfrm#9",
+      "role": "table",
+      "name": "Teller: OPERATOR | Branch: Northgate | F1=Help F3=Exit",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 4,
+      "visible": true,
+      "bounds": {
+        "x": 4,
+        "y": 215,
+        "width": 1102,
+        "height": 16
+      }
+    },
+    {
+      "ref": "mainfrm#16",
+      "role": "text",
+      "name": "Teller: OPERATOR | Branch: Northgate | F1=Help F3=Exit",
+      "state": {
+        "disabled": false,
+        "readonly": false,
+        "required": false,
+        "focused": false
+      },
+      "frame": [
+        "mainfrm"
+      ],
+      "ancestry": [
+        {
+          "role": "region",
+          "name": "Member Search"
+        }
+      ],
+      "ordinal": 2,
+      "visible": true,
+      "bounds": {
+        "x": 6,
+        "y": 217,
+        "width": 304.765625,
+        "height": 12
+      }
+    }
+  ],
+  "digest": "aa02e755dfd5577c"
+}

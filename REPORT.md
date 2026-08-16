@@ -1,6 +1,6 @@
 # Design write-up
 
-> **In progress — Phase 3 of 9.** Sections fill in as the decisions get made
+> **In progress — Phase 5 of 9.** Sections fill in as the decisions get made
 > and tested, not at the end from memory. Anything not yet built says so
 > plainly rather than describing an intention in the present tense.
 
@@ -158,24 +158,57 @@ screen needs to see.
 
 ## 3. Determinism & error handling
 
-_Pending Phases 4–5._ The committed contract:
-
-Replay makes **zero model calls** by construction — it is an interpreter over
-a fixed program, so the same artifact and the same inputs take the same path.
+`src/replay/replay.ts` is the interpreter. Replay makes **zero model calls**
+by construction — every decision in it is either read straight off the
+compiled capability or computed from a live snapshot through the exact same
+scored matcher discovery uses (`src/surface/match.ts`), never asked of a
+planner. Same artifact, same inputs, same path is not a claim about how the
+system usually behaves; it is a structural property of there being no model
+call for anything to vary. `evidence/determinism-1786838165392/` checks this
+rather than asserting it: the same capability, same input, replayed three
+independent times, results diffed with only run-specific metadata (run id,
+timestamps) excluded. Identical.
 
 The brief is explicit that the interesting failures are runtime conditions
 rather than layout drift, and its glossary names conflating a legitimate
 business answer with a crash as the most common design mistake in this
-problem. So the classification is modelled in the schema rather than left to a
-`try`/`catch`: every capability declares detectors, each mapped to
+problem. So the classification is modelled in the schema rather than left to
+a `try`/`catch`: every capability can declare detectors, each mapped to
 `business_outcome` (a real answer the caller needs), `recoverable` (with a
 **bounded** remedy — an unbounded retry is how automation hammers a core
 banking system at 3am), or `hard_failure`. `ReplayResult` has four arms
-accordingly: success, business outcome, failure, escalated.
+accordingly: success, business outcome, failure, escalated. All four are
+exercised by real code paths in `test/replay/replay.test.ts`, not merely
+typed and left untested.
+
+Bounded remedies, concretely. `wait_retry` backs off and re-checks up to a
+declared attempt count; `dismiss` resolves its own descriptor through the
+same matcher every step uses and clicks it; `reauthenticate` names a human
+action Phase 5 has no way to perform, so it escalates immediately rather than
+spinning a retry loop that could never succeed — Phase 7's handoff is what
+turns that into something resumable, and `ReplayEscalated.resumable` is
+honestly `false` until it exists.
 
 Failure detail answers three questions without anyone opening a screenshot:
 which step, what was expected, what was observed — plus the per-signal match
-scores when the failure came from target resolution.
+scores when the failure came from target resolution. `failure/` in a replay's
+evidence directory holds the screenshot and node snapshot from the exact
+moment replay gave up.
+
+**What "declaring an outcome" actually looks like, for real.** Replaying the
+real Phase 4 artifact against `member_number=100599` reaches a genuine
+permission-denial screen — *"Access to member 100599 is restricted. Contact
+Compliance (ext. 4180)."* The compiled artifact has no outcome declared for
+it (`compileCapability` never populates `outcomes` — nothing in a discovery
+trace tells the compiler which of the *other* screens it never visited are
+meaningful), so replay does exactly what it should with no matching detector:
+reports `CHECKPOINT_FAILED` at the step whose checkpoint the screen never
+reaches, honestly, rather than guessing it means something
+(`evidence/replay-1786838072086/`). Turning that into a declared
+`hard_failure` — a reviewer editing the artifact JSON, matching the same
+"human adds it by hand" boundary `render.ts`'s default outcomes text already
+names — is a real, small, well-scoped piece of follow-up work this evidence
+run identifies concretely rather than a gap papered over in the write-up.
 
 ## 4. Heterogeneity & multi-tenant
 

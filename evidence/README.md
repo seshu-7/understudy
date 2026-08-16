@@ -9,13 +9,23 @@ deliverable, not a build product.
 | --- | --- |
 | [`discovery-1786833847548/`](./discovery-1786833847548/) | **The genuine LLM-driven discovery run** the brief requires. Local model (`ollama/qwen2.5:7b-instruct`), no key, no account. Goal: *"look up member 100234 and read their current savings balance."* Reached the answer in 5 steps — sign on, search, read — and extracted `savings_balance: "4,182.55"`, matching the seeded data exactly. Cost: $0.00. |
 | [`discovery-1786834288146/`](./discovery-1786834288146/) | **The same run, replayed from the cassette recorded in the run above, with the Ollama server stopped entirely** before this was started. Same five decisions, same outputs, in seconds instead of minutes, with zero model calls physically possible — Ollama was not reachable when this ran. This is the evidence for "how to run without live services," and for the claim that every run after the first costs nothing. |
-| [`discovery-1786836008257/`](./discovery-1786836008257/) | **A second genuine live run of the same goal, one day later** (`ollama/qwen2.5:7b-instruct`, $0.00) — reached the identical answer (`savings_balance: "4,182.55"` in 5 steps) independently. Recorded after `DiscoveryOutcome` grew the `goal` and `outputGroundings` fields the Phase 4 compiler reads (see [`src/discovery/ground.ts`](../src/discovery/ground.ts)); the two rows above predate that shape and cannot be compiled as-is. This is the summary.json Phase 4's `npm run compile` actually consumed — [`artifacts/corevantage_servicing.member_savings_balance.json`](../artifacts/corevantage_servicing.member_savings_balance.json) is a real compiled artifact, not a fixture. |
+| [`discovery-1786836008257/`](./discovery-1786836008257/) | **A second genuine live run of the same goal, one day later** (`ollama/qwen2.5:7b-instruct`, $0.00) — reached the identical answer (`savings_balance: "4,182.55"` in 5 steps) independently. Recorded after `DiscoveryOutcome` grew the `goal` and `outputGroundings` fields the Phase 4 compiler reads (see [`src/discovery/ground.ts`](../src/discovery/ground.ts)); the two rows above predate that shape and cannot be compiled as-is. This is the summary.json Phase 4's `npm run compile` actually consumed — [`artifacts/corevantage_servicing.member_savings_balance.v1.json`](../artifacts/corevantage_servicing.member_savings_balance.v1.json) is a real compiled artifact, not a fixture. |
 
 Do not confuse the second row with Phase 5's replay engine. This replays the
 **discovery cassette** — the recorded model exchange — to prove discovery
-itself is reproducible offline. Phase 5's replay evidence (`replay-*/`, once
-it exists) is a different thing: the *compiled capability* executing with no
+itself is reproducible offline. Phase 5's replay evidence (`replay-*/`,
+below) is a different thing: the *compiled capability* executing with no
 model in the loop at all, which is the system's actual production path.
+
+### Replay
+
+| Directory | What it is |
+| --- | --- |
+| [`replay-1786838029329/`](./replay-1786838029329/) | **The compiled capability, replaying clean.** `member_number=100234`, attended, against the live target app. All 5 steps resolved and checkpointed; `savings_balance: "4,182.55"` — matching the discovery run it was compiled from exactly. |
+| [`replay-1786838058351/`](./replay-1786838058351/) | **The same capability, a different member.** `member_number=100412`, a member with three accounts instead of two. This is the real test of Phase 4's `structuralOnly` fix (REPORT.md §2): the checkpoint and output-extraction descriptors were stripped of the literal balance they were recorded against specifically so this would still work. It does — `savings_balance: "22,940.18"`, correct for this member, with zero edits to the artifact. |
+| [`replay-1786838072086/`](./replay-1786838072086/) | **An honest failure, not a crash.** `member_number=100599` reaches a real permission-denial screen ("Access to member 100599 is restricted. Contact Compliance...") that this capability has no declared outcome for — nobody has reviewed the draft artifact and added one yet. Replay reports `CHECKPOINT_FAILED` at step 4 rather than silently succeeding or throwing; `failure/` holds the screenshot and node snapshot from the moment it gave up. This is the gap a human reviewer closes by adding a `hard_failure` outcome to the artifact, not something replay should paper over on its own. |
+| [`replay-1786838157645/`](./replay-1786838157645/), [`replay-1786838165392/`](./replay-1786838165392/) | Two more runs of `member_number=100234`, same as the first — see `determinism-1786838165392/` below. |
+| [`determinism-1786838165392/`](./determinism-1786838165392/) | **The determinism claim, checked, not just asserted.** The three `100234` runs above, diffed against each other with only run-specific metadata (runId, timestamps, evidence path) excluded. Identical. |
 
 Each discovery run is a directory named `discovery-<runId>/`:
 
@@ -32,17 +42,17 @@ replay-<runId>/
   failure/           screenshot and node snapshot, written only on failure
 ```
 
-## What will be here at submission
+## Status against the brief
 
-| Run | Shows |
-| --- | --- |
-| `discovery-*` | One genuine LLM-driven run against the live surface |
-| `replay-success-*` | The compiled capability replaying clean, with outputs |
-| `replay-business-outcome-*` | A "no such member" result returned as an answer, not an error |
-| `replay-failure-*` | An injected fault detected and reported with step, expected and observed |
-| `replay-escalated-*` | A run that stopped, handed control to a human, and resumed |
-| `determinism-*` | The same capability replayed N times, results diffed |
-| `cross-model-*` | The same goal discovered by two different models, compiled artifacts compared |
+| Run | Shows | Status |
+| --- | --- | --- |
+| `discovery-*` | One genuine LLM-driven run against the live surface | done |
+| `replay-*` (success) | The compiled capability replaying clean, with outputs, against inputs it was **not** recorded on | done |
+| `replay-*` (failure) | A real, undeclared condition detected and reported with step, expected and observed — not a crash | done |
+| `determinism-*` | The same capability replayed N times, results diffed | done |
+| `replay-business-outcome-*` | A declared business outcome (e.g. "no such member") returned as an answer, not an error | pending a reviewer declaring one on the artifact — see the `replay-1786838072086` row above |
+| `replay-escalated-*` | A run that stopped, handed control to a human, and resumed | pending Phase 7 |
+| `cross-model-*` | The same goal discovered by two different models, compiled artifacts compared | pending Phase 8 |
 
 Sensitive values are redacted at the perception boundary, before anything
 reaches this directory. A test asserts that nothing secret-shaped is present.

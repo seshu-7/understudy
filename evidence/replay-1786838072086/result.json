@@ -1,0 +1,19 @@
+{
+  "status": "failed",
+  "runId": "1786838072086",
+  "capabilityId": "corevantage_servicing.member_savings_balance",
+  "capabilityVersion": 1,
+  "startedAt": "2026-08-15T23:54:32.302Z",
+  "finishedAt": "2026-08-15T23:54:45.142Z",
+  "stepsAttempted": 5,
+  "recoveries": [],
+  "evidenceDir": "C:\\Users\\sesha\\dev\\understudy\\evidence\\replay-1786838072086",
+  "failure": {
+    "code": "CHECKPOINT_FAILED",
+    "stepIndex": 4,
+    "stepIntent": "Click the Search button to initiate the search for member 100234",
+    "expected": "screen shows text within \"Accounts\" (frame: mainfrm) [position 6]",
+    "observed": "target resolution: absent",
+    "message": "step 4's checkpoint did not hold within 10000ms"
+  }
+}
