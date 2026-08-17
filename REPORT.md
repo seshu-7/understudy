@@ -2,8 +2,8 @@
 
 > **Complete.** Written phase by phase as decisions got made and tested, not
 > reconstructed at the end from memory - which is why the bugs a real run
-> caught (§2, §4, §6) are in here with the fix, not smoothed over. §7 is the
-> final, honest list of what is out of scope and why.
+> caught (§2, §4, §5, §6) are in here with the fix, not smoothed over. §7 is
+> the final, honest list of what is out of scope and why.
 
 ## 1. Architecture
 
@@ -326,6 +326,27 @@ real interpreter's, the same failure mode already found and fixed twice in
 Phase 6 (REPORT.md §6). `npm run catalog -- --tools` prints exactly what an
 agent integration would see.
 
+**The catalog and the overlay disagreed about what an id means, and the real
+committed artifacts proved it.** `applyOverlay` never changed the source
+capability's own `id` - so `artifacts/corevantage_servicing.
+member_savings_balance.v1.json` (meridian) and its northstar overlay, the
+exact two files the demo path above walks through in order, answered to one
+identical id. `loadCatalog` had no uniqueness check, so `findCapability`/
+`invokeCapability` silently returned whichever file `readdir()` happened to
+list first - no error, no warning, and no way for a caller to know or
+choose which tenant (pointed at a completely different server) actually
+ran. Running the real, unmodified `npm run catalog -- --tools` against
+`artifacts/` exactly as committed printed two tool definitions sharing one
+sanitised name, which is malformed as an actual tool-use request on top of
+the underlying lookup ambiguity. Fixed the same way every other place a
+capability could be silently ambiguous already fails loud rather than
+guesses: `applyOverlay` now mints a tenant-qualified id (the same
+`.{tenant}` suffix the CLI's own output filename already carried, so the id
+and the file that holds it finally agree), and `loadCatalog` throws on any
+duplicate id, naming both files. The committed northstar artifact was
+regenerated with the fix; `contentHash` is unchanged, since `id` was never
+part of what it hashes.
+
 ## 5. Escalation & handoff
 
 The direction sketched here in earlier phases is built: `src/replay/lease.ts`
@@ -377,6 +398,31 @@ exiting, and calls `resumeCapability` once a human presses Enter - this path
 is real code, not a stub, but wasn't itself exercisable by an agent with no
 terminal human to press the key, which is exactly why the automated
 browser-driven test above exists as the checked evidence instead.
+
+**A stale or duplicate resume used to silently re-execute the step it was
+blocked on.** `Intervention.status` (`open | resolved | abandoned`) existed
+from this phase's first version but was never read anywhere and never
+written to anything but `"open"` — `resumeCapability` re-checked the
+precondition but had no notion that an intervention could already be spent.
+Concretely: a second call to `resumeCapability` against an intervention that
+had already been successfully resumed once would find the precondition
+still holds (a `reauthenticate` handoff's "login cleared" condition, once
+true, stays true) and silently re-execute the step it was blocked on,
+returning a second "successful" `ReplayResult` with no error and no warning.
+For this project's own idempotent balance lookup that is harmless; for a
+capability whose blocked step is a "Submit"/"Post"/"Transfer" control that
+stays visible after firing, a stray retry wrapper, a crash-and-restart from
+a persisted `intervention.json`, or a second concurrent caller would
+duplicate a real action — precisely the "unbounded retry hammering a core
+banking system" failure class the bounded-remedy design in §3 exists to
+prevent everywhere else, with no equivalent bound on resume itself.
+`resumeCapability` now re-reads `intervention.json` from disk fresh rather
+than trusting the caller's possibly-stale in-memory copy (the same reasoning
+as re-checking the precondition against a fresh observation rather than a
+human's word), refuses with a new `INTERVENTION_CONSUMED` failure unless the
+on-disk record is still `"open"` and its id matches, and persists
+`status: "resolved"` *before* continuing rather than after, so a second call
+reads the update rather than racing it.
 
 **One boundary from the original sketch not fully built.** "Their actions are
 captured into the same trace tagged as human-authored" is only partly true:
@@ -485,6 +531,43 @@ from points at a `sensitive` parameter. Four tests
 (`test/replay/replay.test.ts`, "redaction inside replay") prove the real
 secret still reaches the surface while neither trace file nor failure
 evidence ever contains it.
+
+**A fourth defect, found exactly the way this project's own history said one
+still might be hiding: by a live run, not a code read.** A live discovery
+run was asked to sign on and type a password into the login screen's
+`Password` field. `action.text` came back `[redacted:field]` exactly as the
+third defect's fix intended — but `decision.intent`, the model's own
+free-text sentence narrating what it had just done (*"Type the password
+`<secret>` into the Password field"*), was never touched by any redaction
+anywhere, and a small model narrating its own action routinely repeats the
+value verbatim. That sentence went to `trace.jsonl` (both the `"decision"`
+and `"action"` trace events) and `summary.json` unredacted, and — the more
+serious half, matching the third defect's own worst case — propagates
+directly into a compiled `Capability.steps[].intent`, which `render.ts`
+renders as a bolded, prominent line in the human-readable `.md` a reviewer
+reads *before* flipping `approval` from `draft` to `approved`. A leaked
+secret here would sit front-and-center in exactly the document meant to be
+a security review, not buried in a JSON field a reviewer might never open.
+
+Root cause: `redactDecisionForTrace` only ever overwrote `decision.text`/
+`.option`; nothing touched `intent`, and the `"action"` trace event and the
+`DiscoveredStep` pushed into `steps[]` (the object `summary.json` persists
+and the compiler reads directly) used the raw `decision.intent`
+unconditionally, regardless of whether the step's own `sensitive` flag sat
+right next to it in the same object literal. `intent` is natural-language
+prose, not a value with a known shape, so the existing pattern-based
+`redactText` alone could not be trusted to catch it reliably. `redactIntent`
+(`src/discovery/loop.ts`) instead strips the *exact* raw typed or selected
+value out of `intent` first — the one substring known for certain to be the
+secret, since it is the same string `action.text`/`.option` already
+redacted — then runs the ordinary pattern redaction over what's left as a
+backstop, applied everywhere `intent` gets persisted: the decision trace
+event, the action trace event, `steps[]`, and the `historyLines` fed back
+into the model's own next-turn context. The regression test for this
+deliberately mirrors the real leak rather than a convenient fixture: the
+scripted intent text repeats the raw secret the way the live model actually
+did, not a generic "enter the password" that would never have exercised the
+bug at all.
 
 **Two boundaries worth naming rather than leaving implicit.** First, this
 redaction path is for *input* text — what a decision typed in. What a
