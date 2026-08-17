@@ -165,7 +165,7 @@ npm run replay -- artifacts/corevantage_servicing.member_savings_balance.northst
 npm test
 ```
 
-187 tests. Several run against the real target app and a real headless
+199 tests. Several run against the real target app and a real headless
 browser (Playwright) rather than fixtures standing in for either, including
 the cross-tenant replay above and the escalation/handoff flow, both checked
 against real browser sessions in `test/`. No test calls a model. The one
