@@ -9,10 +9,10 @@ npm run target-app     # http://127.0.0.1:4501/servicing/
 ```
 
 Any operator id signs on. No credential is stored or checked, and no real
-personal data appears anywhere — the members are invented.
+personal data appears anywhere. The members are invented.
 
-A second tenant, same server code, one rebranded control — `target-app/
-tenants.ts` — runs standalone on its own port:
+A second tenant, same server code, one rebranded control (`target-app/
+tenants.ts`), runs standalone on its own port:
 
 ```bash
 TARGET_APP_PORT=4502 TARGET_APP_TENANT=northstar npm run target-app
@@ -26,18 +26,18 @@ what that one rename does to a capability recorded against the tenant above.
 
 Three reasons, in order of weight.
 
-**Exceptional states have to happen on demand.** The brief's central point is
-that in a stable enterprise UI the interesting failures are runtime conditions
-— a permission denial, a surprise dialog, a dead session — not layout drift. A
-public site will not produce those when you need them, so the evidence would be
-a matter of luck. Here they are armed with an HTTP call and reproduce on anyone's
-machine.
+Exceptional states have to happen on demand. The brief's central point is
+that in a stable enterprise UI, the interesting failures are runtime
+conditions (a permission denial, a surprise dialog, a dead session), not
+layout drift. A public site won't produce those on request, so the evidence
+would come down to luck. Here they're armed with an HTTP call and reproduce
+on anyone's machine.
 
-**It can be genuinely hostile.** Most public demo sites are modern apps with
-clean markup. That is the opposite of the environment described in the brief,
-and automating one would prove very little.
+It can be genuinely hostile. Most public demo sites are modern apps with
+clean markup, the opposite of the environment described in the brief.
+Automating one would prove very little.
 
-**It respects the ground rules.** No terms to violate, no rate limits to
+It respects the ground rules: no terms to violate, no rate limits to
 exhaust, no real credentials, no real PII.
 
 ## What makes it hostile
@@ -66,7 +66,7 @@ sign on ─▶ member search ─▶ member detail ─▶ open sub-account ─▶
 
 ## Outcomes reachable from ordinary input
 
-These are real behaviour, not injected faults — a reviewer can reach every one
+These are real behaviour, not injected faults. A reviewer can reach every one
 of them by typing into the form.
 
 | Input | Result | Class |
@@ -81,8 +81,8 @@ of them by typing into the form.
 
 ## Faults you cannot reach by typing
 
-Armed over HTTP. Single-shot by default — a fault that stays armed turns a
-demonstration into an infinite loop.
+Armed over HTTP. Single-shot by default, since a fault that stays armed turns
+a demonstration into an infinite loop.
 
 ```bash
 curl "http://127.0.0.1:4501/__control/fault?mode=interstitial"
@@ -107,5 +107,5 @@ requests, `slowMs=<n>` sets the delay.
 
 Stub authentication, in-memory data reset on restart, no persistence, and
 period-appropriate ugliness in place of styling. It is a prop. The parts that
-have to be real — the markup's hostility and the outcome behaviour — are real,
+have to be real, the markup's hostility and the outcome behaviour, are real
 and are the parts under test.

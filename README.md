@@ -3,9 +3,10 @@
 An understudy watches the performer, learns the part, then performs it without them.
 
 This is the integration layer that gives an AI agent hands inside applications
-that expose no API. An LLM drives a real UI to work out how a task is done. The
-successful run is compiled into a typed, versioned **capability**. From then on
-that capability replays deterministically, with no model in the decision loop.
+that expose no API. An LLM drives a real UI to work out how a task is done.
+The successful run compiles into a typed, versioned **capability**. After
+that, the capability replays deterministically. No model sits in the
+decision loop.
 
 ```
 goal ──▶ discovery (LLM drives the UI) ──▶ trace ──▶ compiler ──▶ capability
@@ -15,10 +16,10 @@ goal ──▶ discovery (LLM drives the UI) ──▶ trace ──▶ compiler 
 ```
 
 Built across nine phases against a deliberately hostile legacy banking
-console, with a real local model driving discovery at every step and the
-resulting evidence committed alongside the code, not asserted in prose.
+console, with a real local model driving discovery at every step. The
+evidence is committed alongside the code rather than just claimed in prose.
 [REPORT.md](./REPORT.md) is the full design write-up, including the bugs a
-real run caught and how they were fixed, and the cuts made along the way.
+real run caught, how they got fixed, and the cuts made along the way.
 
 ## Why it is built this way
 
@@ -27,35 +28,37 @@ Four decisions carry the design. Each is argued properly in [REPORT.md](./REPORT
 **1. Perception is a normalised UI graph, never raw markup.** A surface adapter
 emits nodes with a role, an accessible name, state and relationships. The model
 never sees HTML. This is what makes the desktop story a real seam rather than a
-paragraph of intent — Windows UI Automation and macOS AX produce the same shape,
+paragraph of intent: Windows UI Automation and macOS AX produce the same shape,
 though only the web adapter is actually built and tested here (REPORT.md §7).
 
 **2. Controls are addressed by scored evidence, not by selector.** Each step
-records a bundle — role, accessible name, nearby label, containing section,
-relative anchor, ordinal — and replay scores every candidate node against it. A
+records a bundle: role, accessible name, nearby label, containing section,
+relative anchor, ordinal. Replay scores every candidate node against it. A
 unique winner above threshold wins; anything else is `AMBIGUOUS_TARGET` and a
 hard stop. It refuses to guess, and it can explain why it matched.
 
 **3. The three-way outcome taxonomy lives in the schema.** Every capability can
 declare what a legitimate business answer looks like ("no such member"), what
 is recoverable and with what *bounded* remedy, and what is a hard failure. The
-glossary in the brief calls conflating the first with the third the most common
-design mistake in this problem; making it declarative is how this avoids it.
+brief's glossary names conflating the first with the third as the most common
+design mistake in this problem. Making the taxonomy declarative is how this
+avoids it.
 
 **4. Control transfer is a lease, not a callback.** Escalation releases the
-session; a human drives the *same* live session, proven against a real browser
-in `test/replay/resume-web.test.ts`; resume re-verifies its precondition before
-continuing rather than blindly picking up where it left off.
+session. A human drives the *same* live session (proven against a real
+browser in `test/replay/resume-web.test.ts`), and resume re-verifies its
+precondition before continuing rather than blindly picking up where it left
+off.
 
 ## Running it costs nothing
 
-Discovery runs against a **local model via Ollama** — no API key, no account, no
-network. That is not only a budget decision. Back-office banking screens carry
-member names, account numbers and balances in every observation, and no
+Discovery runs against a **local model via Ollama**. No API key, no account,
+no network. That's not purely a budget decision: back-office banking screens
+carry member names, account numbers and balances in every observation, and no
 institution is going to pipe those to a third-party inference API. Local-first
-discovery is a data-residency property; the provider sits behind a one-line seam
-(`src/discovery/providers/`) so anyone who wants to run it on a hosted frontier
-model can, without touching the loop itself.
+discovery is a data-residency property, and the provider sits behind a
+one-line seam (`src/discovery/providers/`), so anyone who wants to run it on a
+hosted frontier model can, without touching the loop itself.
 
 Replay makes **zero** model calls by construction. That is the entire point of
 the system, checked in `evidence/determinism-1786838165392/`, not just claimed.
@@ -100,13 +103,13 @@ npm run discover -- --goal "look up member 100234 and read their current savings
 Real evidence from this exact command is already committed:
 [`evidence/discovery-1786836008257/`](./evidence/discovery-1786836008257/).
 `UNDERSTUDY_CASSETTE=replay` (the `.env.example` default) replays a recorded
-exchange instead of calling Ollama at all — the same five decisions, in
-seconds, with zero model calls physically possible; see
+exchange instead of calling Ollama at all. Same five decisions, in seconds,
+with zero model calls physically possible; see
 [`evidence/discovery-1786834288146/`](./evidence/discovery-1786834288146/).
 
-**2. Compile.** Distil the trace into a typed, versioned capability — parameters
-inferred from what varied, checkpoints inferred from what proved each step
-worked, outputs traced back to a real node on screen.
+**2. Compile.** Distil the trace into a typed, versioned capability.
+Parameters get inferred from what varied, checkpoints from what proved each
+step worked, outputs traced back to a real node on screen.
 
 ```bash
 npm run compile -- evidence/discovery-1786836008257/summary.json \
@@ -120,7 +123,7 @@ The real output is committed:
 / [`.md`](./artifacts/corevantage_servicing.member_savings_balance.v1.md).
 
 **3. Replay.** Zero model calls. Same artifact, same inputs, same path, by
-construction, not by tendency.
+construction rather than tendency.
 
 ```bash
 npm run replay -- artifacts/corevantage_servicing.member_savings_balance.v1.json \
@@ -128,23 +131,22 @@ npm run replay -- artifacts/corevantage_servicing.member_savings_balance.v1.json
 ```
 
 Try a member the capability was never recorded against
-(`--input member_number=100412`, three accounts instead of two) to see the
-same artifact generalise, not just replay verbatim — real evidence in
+(`--input member_number=100412`, three accounts instead of two) and watch the
+same artifact generalise instead of just replaying verbatim. Real evidence in
 [`evidence/replay-1786838058351/`](./evidence/replay-1786838058351/), written
 up in REPORT.md §2.
 
 **4. Call it like an agent would.** The capability catalog projects every
-artifact into an Anthropic-tool-use-shaped definition — typed inputs, typed
+artifact into an Anthropic-tool-use-shaped definition: typed inputs, typed
 outputs, nothing an integration has to guess.
 
 ```bash
 npm run catalog -- --tools
 ```
 
-**5. Reuse across tenants, without re-recording.** The same capability, against
-a second real institution running the same vendor software with one button
-renamed — see REPORT.md §4 for what actually happens *without* this step
-first (not what you'd guess).
+**5. Reuse across tenants, without re-recording.** The same capability,
+against a second real institution running the same vendor software with one
+button renamed. REPORT.md §4 covers what happens without this step first.
 
 ```bash
 TARGET_APP_PORT=4502 TARGET_APP_TENANT=northstar npm run target-app   # third terminal
@@ -163,10 +165,10 @@ npm run replay -- artifacts/corevantage_servicing.member_savings_balance.northst
 npm test
 ```
 
-187 tests, several of them against the real target app and a real headless
-browser (Playwright), not fixtures standing in for either — including the
-cross-tenant replay above and the escalation/handoff flow, both checked
-against real browser sessions in `test/`. No test calls a model; the one
+187 tests. Several run against the real target app and a real headless
+browser (Playwright) rather than fixtures standing in for either, including
+the cross-tenant replay above and the escalation/handoff flow, both checked
+against real browser sessions in `test/`. No test calls a model. The one
 `Planner` a live model could reach is never exercised outside `npm run
 discover` itself.
 

@@ -1,6 +1,6 @@
 # evidence
 
-What actually happened when this ran. Committed on purpose — it is a
+What actually happened when this ran. Committed on purpose: it's a
 deliverable, not a build product.
 
 ## Runs in this repository
@@ -11,8 +11,8 @@ deliverable, not a build product.
 | [`discovery-1786834288146/`](./discovery-1786834288146/) | **The same run, replayed from the cassette recorded in the run above, with the Ollama server stopped entirely** before this was started. Same five decisions, same outputs, in seconds instead of minutes, with zero model calls physically possible — Ollama was not reachable when this ran. This is the evidence for "how to run without live services," and for the claim that every run after the first costs nothing. |
 | [`discovery-1786836008257/`](./discovery-1786836008257/) | **A second genuine live run of the same goal, one day later** (`ollama/qwen2.5:7b-instruct`, $0.00) — reached the identical answer (`savings_balance: "4,182.55"` in 5 steps) independently. Recorded after `DiscoveryOutcome` grew the `goal` and `outputGroundings` fields the Phase 4 compiler reads (see [`src/discovery/ground.ts`](../src/discovery/ground.ts)); the two rows above predate that shape and cannot be compiled as-is. This is the summary.json Phase 4's `npm run compile` actually consumed — [`artifacts/corevantage_servicing.member_savings_balance.v1.json`](../artifacts/corevantage_servicing.member_savings_balance.v1.json) is a real compiled artifact, not a fixture. |
 
-Do not confuse the second row with Phase 5's replay engine. This replays the
-**discovery cassette** — the recorded model exchange — to prove discovery
+Don't confuse the second row with Phase 5's replay engine. This replays the
+**discovery cassette** (the recorded model exchange) to prove discovery
 itself is reproducible offline. Phase 5's replay evidence (`replay-*/`,
 below) is a different thing: the *compiled capability* executing with no
 model in the loop at all, which is the system's actual production path.
@@ -56,21 +56,21 @@ replay-<runId>/
 | cross-tenant reuse | The same capability, overlaid and replayed against a second real tenant with no re-recording | done — `replay-1786846579516/` above |
 | `cross-model-*` | The same goal discovered by two different models, compiled artifacts compared | cut — REPORT.md §7 caps this project at two stretch goals; cross-tenant reuse and the capability catalog were the two chosen |
 
-**Escalation and handoff, why this one isn't a static directory.** Every
-other row here is a `npm run discover`/`npm run compile`/`npm run replay`
-invocation captured once and committed. A genuine handoff needs a human to
-actually act mid-run, which an agent generating this repository cannot
-produce as a one-off recording without faking the human's half. The honest
-substitute — used instead of a fabricated `replay-escalated-*/` — is
+Why escalation and handoff isn't a static directory here: every other row
+above is a `npm run discover`/`npm run compile`/`npm run replay` invocation
+captured once and committed. A genuine handoff needs a human to actually act
+mid-run, and a one-off recording of that can't be produced here without
+faking the human's half. The honest substitute, used instead of a
+fabricated `replay-escalated-*/`, is
 [`test/replay/resume-web.test.ts`](../test/replay/resume-web.test.ts): a real
 `WebSurface`, the real committed artifact, run against a policy that marks
 "Sign On" irreversible (which happens twice in the real flow), with a
 stand-in for the human's own action calling `surface.act()` directly against
 the exact browser instance replay itself escalated with. It resumes correctly
 across both handoffs and reaches the identical `savings_balance: "4,182.55"`
-the fully-automated run does — re-run it any time with `npm test` rather than
+the fully-automated run does. Re-run it any time with `npm test` rather than
 trusting a snapshot of one run that happened once. REPORT.md §5 has the full
-write-up, including what this does and does not prove.
+write-up, including what this does and doesn't prove.
 
 Sensitive values are redacted at the perception boundary, before anything
 reaches this directory. A test asserts that nothing secret-shaped is present.
