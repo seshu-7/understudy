@@ -53,6 +53,16 @@ export function redactText(value: string, policy: RedactionPolicy): string {
   return out;
 }
 
+/** The placeholder a field-name-based redaction produces - shared so
+ *  discovery's trace redaction and replay's action redaction always agree on
+ *  the exact text a redacted value becomes, rather than each formatting
+ *  `policy.placeholder` the same way independently and risking the two
+ *  drifting apart, the way `SemanticDescriptor` and `contentHash` once did
+ *  in this project (REPORT.md §2, §4). */
+export function fieldPlaceholder(policy: RedactionPolicy): string {
+  return policy.placeholder.replace("{name}", "field");
+}
+
 export function fieldIsSensitiveByName(label: string, policy: RedactionPolicy): boolean {
   const normalized = label.toLowerCase();
   return policy.fieldNames.some((f) => normalized.includes(f));
@@ -65,7 +75,7 @@ export function fieldIsSensitiveByName(label: string, policy: RedactionPolicy): 
 export function redactValue(value: string, label: string, policy: RedactionPolicy): string {
   if (!value) return value;
   if (fieldIsSensitiveByName(label, policy)) {
-    return policy.placeholder.replace("{name}", "field");
+    return fieldPlaceholder(policy);
   }
   return redactText(value, policy);
 }

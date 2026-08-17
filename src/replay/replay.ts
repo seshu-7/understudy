@@ -1,7 +1,7 @@
 import { describeDetector, describeTarget } from "../artifact/format.js";
 import type { Capability, Detector, OutcomeSpec, ParamSpec, Remedy, SemanticDescriptor, Step, ValueSource } from "../artifact/schema.js";
 import { checkAction, unattendedGate, type Policy } from "../discovery/policy.js";
-import { redactSnapshot } from "../discovery/redact.js";
+import { fieldPlaceholder, redactSnapshot } from "../discovery/redact.js";
 import { match } from "../surface/match.js";
 import { coerceOutput, evaluateDetector, extractOutput, type DetectorResult } from "./detect.js";
 import { readIntervention, type Intervention, writeIntervention } from "./intervention.js";
@@ -102,7 +102,7 @@ function isSensitiveValueSource(value: ValueSource, capability: Capability): boo
  *  replay - unlike discovery - has no planner-facing text to redact it out
  *  of in the first place. */
 function redactActionForTrace(action: Action, stepAction: Step["action"], capability: Capability, policy: Policy): Action {
-  const placeholder = policy.redaction.placeholder.replace("{name}", "field");
+  const placeholder = fieldPlaceholder(policy.redaction);
   if (action.kind === "fill" && stepAction.kind === "fill" && isSensitiveValueSource(stepAction.value, capability)) {
     return { ...action, text: placeholder };
   }

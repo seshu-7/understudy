@@ -3,7 +3,7 @@ import { formatObservation } from "./observe-format.js";
 import { checkAction, unattendedGate, type Policy } from "./policy.js";
 import { CostCeilingExceededError, CostGovernor } from "./cost.js";
 import { groundOutputs, type OutputGrounding } from "./ground.js";
-import { fieldIsSensitiveByName, redactText, type RedactionPolicy } from "./redact.js";
+import { fieldIsSensitiveByName, fieldPlaceholder, redactText, type RedactionPolicy } from "./redact.js";
 import { TraceWriter } from "./trace.js";
 import type { Planner, PlannerDecision } from "./planner.js";
 import type { DiscoveredStep, DiscoveryGoal, DiscoveryOutcome, StopReason } from "./types.js";
@@ -105,10 +105,6 @@ function isSensitiveDecision(decision: PlannerDecision, indexed: readonly UINode
   return fieldIsSensitiveByName(node?.label ?? node?.name ?? "", policy);
 }
 
-function redactedPlaceholder(policy: RedactionPolicy): string {
-  return policy.placeholder.replace("{name}", "field");
-}
-
 /** The model's own free-text `intent` narration routinely repeats the raw
  *  value it just typed or selected (e.g. "Type the password X into the
  *  Password field") - intent is natural-language prose, not a value with a
@@ -117,14 +113,14 @@ function redactedPlaceholder(policy: RedactionPolicy): string {
  *  secret), then run the normal pattern redaction over what's left in case
  *  anything else slipped in. */
 function redactIntent(decision: PlannerDecision, policy: RedactionPolicy): string {
-  const placeholder = redactedPlaceholder(policy);
+  const placeholder = fieldPlaceholder(policy);
   const rawValue = decision.text || decision.option;
   const scrubbed = rawValue ? decision.intent.split(rawValue).join(placeholder) : decision.intent;
   return redactText(scrubbed, policy);
 }
 
 function redactDecisionForTrace(decision: PlannerDecision, policy: RedactionPolicy): PlannerDecision {
-  const placeholder = redactedPlaceholder(policy);
+  const placeholder = fieldPlaceholder(policy);
   return {
     ...decision,
     ...(decision.text !== undefined ? { text: placeholder } : {}),
@@ -134,7 +130,7 @@ function redactDecisionForTrace(decision: PlannerDecision, policy: RedactionPoli
 }
 
 function redactActionForStorage(action: Action, policy: RedactionPolicy): Action {
-  const placeholder = redactedPlaceholder(policy);
+  const placeholder = fieldPlaceholder(policy);
   if (action.kind === "fill") return { ...action, text: placeholder };
   if (action.kind === "select") return { ...action, option: placeholder };
   return action;
