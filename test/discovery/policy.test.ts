@@ -28,7 +28,7 @@ function click(): Action {
 }
 
 describe("the guardrail model", () => {
-  it("allows an action on an allowlisted route at a known origin", () => {
+  it("allows an allowlisted route", () => {
     const result = checkAction(click(), HERE, policy);
     expect(result.allowed).toBe(true);
   });

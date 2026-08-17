@@ -48,7 +48,7 @@ function snapshot(nodes: UINode[]): UISnapshot {
 }
 
 describe("text similarity", () => {
-  it("normalises the punctuation legacy forms decorate labels with", () => {
+  it("strips legacy label punctuation", () => {
     expect(normalize("  Member   Number: ")).toBe("member number");
     expect(normalize("Amount *")).toBe("amount");
   });
@@ -82,7 +82,7 @@ describe("matching an unlabelled control by anchor", () => {
     node({ role: "button", name: "Search" }),
   ];
 
-  it("resolves the input that follows its label text", () => {
+  it("finds the input after its label", () => {
     const result = match(
       {
         role: "textbox",
@@ -112,7 +112,7 @@ describe("matching an unlabelled control by anchor", () => {
 });
 
 describe("refusing to guess", () => {
-  it("reports ambiguity rather than taking the first of two identical controls", () => {
+  it("won't pick between two identical controls", () => {
     const nodes = [
       node({ role: "button", name: "Submit" }),
       node({ role: "button", name: "Submit" }),
