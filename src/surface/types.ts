@@ -1,31 +1,19 @@
 /**
- * The perception and action boundary.
- *
- * Above this line the system reasons about a UI as roles, names and
- * relationships. Below it lives Playwright, or Windows UI Automation, or an
- * accessibility bridge. The design rests on that split holding: if the
- * discovery loop or the replay engine ever needs to know it is driving a
- * browser, the "this extends to desktop" claim in the write-up is fiction.
+ * The perception and action boundary. Above this line the system reasons
+ * about a UI as roles, names and relationships; below it lives Playwright,
+ * or eventually UI Automation / AX. Keeping that split real is what makes
+ * the desktop claim more than a paragraph of intent.
  *
  * `SurfaceKind`, `Role`, `TextMatch`, `FramePath`, `Rect`, `SemanticDescriptor`
- * and `WaitCondition` are re-exported from `../artifact/schema.ts` rather
- * than declared here. They used to be hand-written in this file, mirrored by
- * a second, independent hand-written copy inside the Zod artifact schema,
- * with a test asserting the two never drifted apart. Phase 4 tried to
- * compile a discovered step's descriptor directly into an artifact `Step`
- * and the type checker caught what the test could not: Zod infers
- * `frame: string[]`, this file declared `frame: readonly string[]`, and
- * TypeScript correctly refused to treat the two as the same type even though
- * every value either one could hold was identical. A parity test proves two
- * representations agree on today's shape; it cannot stop someone editing one
- * and not the other next month. One definition does.
+ * and `WaitCondition` are re-exported from `../artifact/schema.ts` instead of
+ * declared here — a hand-written mirror of these once drifted from the Zod
+ * schema on `frame` (`string[]` vs `readonly string[]`), caught by the type
+ * checker compiling a real step, not by the parity test meant to catch it.
+ * One definition now, not two kept in sync by hand.
  *
- * These are the types that get *persisted* — written into a capability and
- * read back off disk, possibly days or tenants later — which is exactly the
- * boundary Zod validation is for. `UINode`, `UISnapshot`, `Action` and the
- * rest below stay plain TypeScript: they describe live, ephemeral data our
- * own adapter just produced, and nothing here ever deserialises them from
- * disk.
+ * `UINode`, `UISnapshot`, `Action` and the rest below stay plain TypeScript:
+ * live, ephemeral data our own adapter just produced, never deserialised off
+ * disk, so there's nothing here for Zod to validate.
  */
 export type { SurfaceKind, Role, TextMatch, FramePath, Rect, SemanticDescriptor, WaitCondition } from "../artifact/schema.js";
 import type { Role, SemanticDescriptor, SurfaceKind, FramePath, Rect, WaitCondition } from "../artifact/schema.js";

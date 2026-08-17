@@ -1,6 +1,6 @@
 /**
- * Seeded records for the servicing console. In memory, reset on restart —
- * this is a prop, not a system of record.
+ * Seeded records for the servicing console. In memory, reset on restart.
+ * This is a prop, not a system of record.
  *
  * The data is shaped to produce the outcome classes the replay engine has to
  * tell apart, from ordinary inputs rather than injected faults:
@@ -9,8 +9,8 @@
  *   - a restricted member gives a permission denial (hard failure)
  *   - a closed member gives a different business outcome again
  *
- * Names are deliberately awkward — accents, hyphens, varying length — because
- * accessible-name matching that only works on "John Smith" is not matching.
+ * Names are deliberately awkward (accents, hyphens, varying length), because
+ * accessible-name matching that only works on "John Smith" isn't matching.
  */
 
 export type MemberStatus = "active" | "closed" | "restricted";

@@ -3,16 +3,14 @@ import type { Capability, Step } from "./schema.js";
 
 /**
  * The human-readable side of "the artifact should be versioned and
- * reviewable — both a human reviewer and a calling agent should be able to
- * understand what the capability does" (brief, §3.2). A capability is JSON
- * because a program has to read it; this is Markdown because a person also
- * has to, and a person reviewing a capability before it goes from `draft` to
- * `approved` should not have to parse descriptor objects to do it.
+ * reviewable" (brief, §3.2). A capability is JSON because a program has to
+ * read it; this is Markdown because a person does too, and shouldn't have to
+ * parse descriptor objects to decide whether a capability goes from `draft`
+ * to `approved`.
  *
- * Deliberately renders every field, including ones a shorter summary would
- * drop — a reviewer approving unattended replay of a step against a legacy
- * banking screen is exactly the audience that needs to see the actual match
- * evidence a step will resolve against, not a gloss of it.
+ * Renders every field on purpose, including ones a shorter summary would
+ * drop. A reviewer signing off on unattended replay against a legacy banking
+ * screen needs the actual match evidence, not a gloss of it.
  */
 
 function describeAction(step: Step): string {

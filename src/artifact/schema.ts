@@ -1,33 +1,26 @@
 import { z } from "zod";
 
 /**
- * The capability artifact, as a Zod schema.
+ * The capability artifact, as a Zod schema: one definition serving runtime
+ * validation of a capability read back off disk, the TypeScript types the
+ * rest of the system compiles against, and (free, since it's already
+ * JSON-Schema-shaped) the contract a calling agent's tool-use surface would
+ * publish. `src/artifact/types.ts` re-exports the inferred types rather than
+ * declaring its own.
  *
- * This is the source of truth the Phase 0 seam promised: one definition that
- * serves runtime validation of a capability read back off disk, the
- * TypeScript types the rest of the system compiles against, and — free of
- * charge, since it is already JSON-Schema-shaped — the contract a calling
- * agent's tool-use surface would publish. `src/artifact/types.ts` re-exports
- * the inferred types from here rather than declaring its own, so there is
- * exactly one place this shape can drift.
+ * The descriptor vocabulary (`Role`, `TextMatch`, `SemanticDescriptor`, ...)
+ * is re-declared as Zod here rather than imported from `src/surface/types.ts`,
+ * since those hand-written interfaces describe live, trusted data our own
+ * adapter produced and there's nothing to validate there. A capability read
+ * back off disk is untrusted input crossing a real boundary, which is where
+ * Zod earns its keep. `test/artifact/schema-surface-parity.test.ts` keeps
+ * the two representations honest.
  *
- * Two things live here that were only comments before. The descriptor
- * vocabulary (`Role`, `TextMatch`, `SemanticDescriptor`, ...) is re-declared
- * as Zod rather than imported from `src/surface/types.ts`, because those
- * hand-written interfaces describe *live, trusted* data our own adapter just
- * produced — nothing to validate there. A capability read back off disk is
- * the opposite: untrusted input crossing a real boundary, exactly where Zod
- * earns its keep. `test/artifact/schema-surface-parity.test.ts` is what keeps
- * the two representations honest — it runs a real `SemanticDescriptor` out of
- * the actual matcher through this schema and fails loudly the moment they
- * disagree, rather than letting them drift silently.
- *
- * And the "remedy required iff recoverable" rule from the original comment is
- * now real: `OutcomeSpecSchema` enforces it with `.superRefine`, in both
- * directions - a `recoverable` outcome with no remedy is rejected, and a
- * `business_outcome` or `hard_failure` carrying one is too, because a remedy
- * nobody will ever consult is dead data in an artifact meant to be read by a
- * human reviewer.
+ * `OutcomeSpecSchema` enforces "remedy required iff recoverable" with
+ * `.superRefine` in both directions: a `recoverable` outcome with no remedy
+ * is rejected, and a `business_outcome` or `hard_failure` carrying one is
+ * too, since a remedy nobody will ever consult is dead data in an artifact
+ * meant for a human reviewer.
  */
 
 // ---------------------------------------------------------------------------

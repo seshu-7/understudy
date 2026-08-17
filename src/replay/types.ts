@@ -2,15 +2,14 @@ import type { MatchEvidence, SemanticDescriptor } from "../surface/types.js";
 import type { OutcomeClass } from "../artifact/types.js";
 
 /**
- * The result contract — what an AI agent gets back when it invokes a
- * capability in production.
- *
- * Four arms, not two. The brief is explicit that conflating a legitimate
- * business answer with a crash is the most common design mistake here, so
- * `business_outcome` is its own arm rather than an error subtype or a null
- * return. `escalated` is the fourth because a run that stopped and handed
- * control to a human is neither a success nor a failure, and a caller that
- * cannot tell the difference will retry something a person is mid-way through.
+ * The result contract: what an AI agent gets back when it invokes a
+ * capability in production. Four arms, not two. The brief is explicit that
+ * conflating a legitimate business answer with a crash is the most common
+ * design mistake here, so `business_outcome` is its own arm rather than an
+ * error subtype or a null return. `escalated` is the fourth, since a run
+ * that stopped and handed control to a human is neither a success nor a
+ * failure — a caller that can't tell the difference will retry something a
+ * person is mid-way through.
  */
 export type ReplayResult =
   | ReplaySuccess
